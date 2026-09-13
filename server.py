@@ -813,12 +813,15 @@ def api_match(req: MatchReq):
         ta_side += (f"\n\n【用户自己对 TA 的了解（用户写的，不是 TA 的公开内容）】\n{note}\n"
                     f"注意：这一部分来自用户转述，不是 TA 公开内容的推论 —— 用它的时候要标明来源，"
                     f"别当成「素材里读出来的」。")
+    me_name = (rec.get("name") or "我").strip() or "我"
     card = cli_answer(
         f"{p}\n\n【我的关注地图】\n{rec.get('persona') or ''}\n\n"
         f"【TA 的关注地图】\n{ta_side}\n\n"
         f"补充事实：TA 能读到的公开创作只有 {len(ta.library)} 条"
         f"（约 {_lib_chars(ta.library)} 字），卡片上要如实标出这件事。")
-    return {"ok": True, "card": card, "ta_name": ta.name, "ta_count": len(ta.library)}
+    # ⚠️ 标题由前端渲染（带两个名字）——模型不用再写一遍，避免卡上出现两个标题
+    return {"ok": True, "card": card, "ta_name": ta.name, "me_name": me_name,
+            "ta_count": len(ta.library)}
 
 
 class MeReq(BaseModel):

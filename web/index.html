@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>社恐破冰船 · 超想认识你，那先跟你的分身 Agent 聊聊吧</title>
+<title>社恐破冰船 · 让 TA 的分身先跟你聊两句，再给你一句能发出去的话</title>
 <link rel="icon" href="/favicon.svg">
 <style>
 /* ============================================================
@@ -174,6 +174,7 @@ button.accent:hover:not(:disabled) { box-shadow: 0 5px 16px rgba(232,163,61,.36)
 button.wide { width: 100%; }
 
 .hint { font-size: 12.5px; color: var(--sub); margin-top: 10px; }
+.try i { font-style: normal; font-size: 10.5px; color: var(--sub); margin-left: 3px; }
 .hint.warn { color: #A96C15; }
 
 /* ---------- 钩子 ---------- */
@@ -811,7 +812,7 @@ try {
   <div class="topbar">
     <div class="brand">
       <span class="brand-name">社恐<em>破冰船</em></span>
-      <span class="brand-tag">超想认识你，那先跟你的分身聊聊</span>
+      <span class="brand-tag">先让 TA 的分身跟你聊两句</span>
     </div>
     <div class="me-wrap">
       <div class="me-entry" id="me-entry" onclick="openDrawer()">
@@ -825,7 +826,7 @@ try {
 
   <!-- ========== 幕 1：找人 ========== -->
   <div class="card" id="stage-hook">
-    <div class="hook">想知道 <em>TA 会怎么看你</em> 吗？</div>
+    <div class="hook">现在，说一个你<em>一直想认识</em>的人</div>
 
     <div class="howto">
       <div class="hi"><span class="n">1</span><span>输入一个你想认识的知乎答主</span></div>
@@ -844,10 +845,11 @@ try {
     </div>
 
     <div class="try">
-      不知道试谁？点一个：
-      <span onclick="tryWho('梁边妖')">梁边妖</span>
-      <span onclick="tryWho('曾加')">曾加</span>
-      <span onclick="tryWho('陈章鱼')">陈章鱼</span>
+      不知道试谁？点一个（都是实测料厚、能聊出东西的）：
+      <span onclick="tryWho('曾加')">曾加<i>婚恋 · 数据</i></span>
+      <span onclick="tryWho('梁边妖')">梁边妖<i>脑洞 · 娱乐</i></span>
+      <span onclick="tryWho('chenqin')">chenqin<i>数据 · 社科</i></span>
+      <span onclick="tryWho('河森堡')">河森堡<i>历史 · 博物馆</i></span>
     </div>
 
     <div class="cands" id="cand-list"></div>
@@ -1279,7 +1281,17 @@ async function makeMatch() {
     if (ME && ME.mode === 'profile') why.push(`你自己的公开创作也不多（${ME.count || 0} 条）`);
     $('match-why').innerHTML = (why.length ? why.join('；') + '，' : '') +
       `没有足够的语言样本让两个分身对话 —— 所以这张卡比的是<b>你们关注领域的重合</b>，不是谁像谁。`;
-    $('match-rendered').innerHTML = mdToHtml(d.card);
+    // 信笺头：**写上是谁和谁** —— 这张卡会被截图发出去，没有名字就没有分享属性
+    const meName = d.me_name || (ME && ME.name) || myName || '你';
+    $('match-rendered').innerHTML =
+      `<div class="ice-top">
+         <div>
+           <div class="ice-brand">社恐破冰船 · INTEREST MATCH</div>
+           <div class="ice-title">${esc(d.ta_name || taName)} × ${esc(meName)} · 兴趣匹配卡</div>
+         </div>
+         <div class="ice-to">不是匹配度，是你们都能聊的地方</div>
+       </div>` + mdToHtml(d.card);
+    iceMakeCopyable('match-rendered');
     $('stage-match').classList.remove('hidden');
     $('stage-match').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) { toast('出错：' + e.message); }
@@ -1905,11 +1917,41 @@ function pick(raw, title, next) {
   return m ? m[1].trim() : '';
 }
 
+/** 按【标记】取一段，**与段落顺序无关**。
+ *  ⚠️ 原来用「取到下一个标记为止」的写法：模型一旦换个段落顺序，
+ *  前一段就会把后一段的原文整段吞进去 → 卡上同一段话出现两遍（真踩到过）。 */
+function iceSection(raw, label) {
+  const m = new RegExp('【' + label + '】([\\s\\S]*?)(?=【|$)').exec(raw || '');
+  return m ? m[1].trim() : '';
+}
+
+/** 把 markdown 卡片里「能直接发出去的话」那些条目，补上复制按钮
+ *  （信笺版的原则：凡是能让用户直接拿去发的句子，都得能一键复制） */
+function iceMakeCopyable(boxId) {
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  const heads = [...box.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+  const h = heads.find(x => /直接发|能发|开场白|直接用/.test(x.textContent));
+  if (!h) return;
+  let el = h.nextElementSibling;
+  while (el && !/^H[1-6]$/.test(el.tagName)) {
+    if (el.tagName === 'UL' || el.tagName === 'OL') {
+      el.querySelectorAll('li').forEach((li, i) => {
+        const sp = document.createElement('span');
+        sp.className = 'cp'; sp.textContent = '复制';
+        sp.onclick = () => copyText(li.innerText.replace(/^\d+[.、)]\s*/, '').trim(), sp);
+        li.appendChild(sp);
+      });
+    }
+    el = el.nextElementSibling;
+  }
+}
+
 function renderIce(raw, name) {
-  const insight = pick(raw, '一句话洞察', 'TA 眼中的你');
-  const view = pick(raw, 'TA 眼中的你', '开场白');
-  const openers = pick(raw, '开场白', '两个兴趣点');
-  const points = pick(raw, '两个兴趣点', '\u0000');
+  const insight = iceSection(raw, '一句话洞察');
+  const view = iceSection(raw, 'TA 眼中的你');
+  const openers = iceSection(raw, '开场白');
+  const points = iceSection(raw, '两个兴趣点');
   const lines = openers.split('\n').map(s => s.replace(/^\d+[.、)]\s*/, '').trim()).filter(s => s.length > 4);
 
   // 存下来给「导出图片」用
@@ -1945,13 +1987,21 @@ function renderIce(raw, name) {
   $('ice-card').innerHTML = h;
 }
 
+/** 通用复制（卡片上所有「能直接发出去的话」都走它） */
+function copyText(txt, el = null, okMsg = '已复制 ✓', failMsg = '这句能直接发出去') {
+  navigator.clipboard.writeText(txt).then(() => {
+    if (el) {
+      const old = el.textContent;
+      el.textContent = '已复制 ✓'; el.classList.add('done');
+      setTimeout(() => { el.textContent = old; el.classList.remove('done'); }, 1600);
+    }
+    toast(okMsg === '已复制 ✓' ? failMsg : okMsg);
+  }).catch(() => toast('复制失败，请手动选择'));
+}
+
 function copyOpener(el) {
   const txt = el.dataset.txt || el.parentElement.querySelector('.txt').textContent;
-  navigator.clipboard.writeText(txt).then(() => {
-    el.textContent = '已复制 ✓'; el.classList.add('done');
-    toast('开场白已复制');
-    setTimeout(() => { el.textContent = '复制'; el.classList.remove('done'); }, 1600);
-  }).catch(() => toast('复制失败，请手动选择'));
+  copyText(txt, el, '开场白已复制', '开场白已复制');
 }
 
 /** 把破冰卡画成图片（保存 / 分享用） */
