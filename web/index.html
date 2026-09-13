@@ -175,6 +175,16 @@ button.wide { width: 100%; }
 
 .hint { font-size: 12.5px; color: var(--sub); margin-top: 10px; }
 .try i { font-style: normal; font-size: 10.5px; color: var(--sub); margin-left: 3px; }
+
+/* 搜不到人时的指路（醒目但不吓人） */
+.searchhelp { margin-top: 14px; background: var(--accent-soft);
+  border: 1.5px dashed var(--accent-line); border-radius: var(--r); padding: 15px 16px; }
+.searchhelp .sh-t { font-size: 14px; font-weight: 700; color: #A96C15; margin-bottom: 7px; }
+.searchhelp .sh-b { font-size: 13px; color: var(--ink-soft); line-height: 1.9; margin-bottom: 12px; }
+.searchhelp .sh-acts { display: flex; gap: 9px; flex-wrap: wrap; }
+.searchhelp .sh-acts button { font-size: 13px; padding: 9px 14px; }
+.searchhelp .sh-tip { font-size: 11.5px; color: #A98F63; margin-top: 10px; line-height: 1.8; }
+.searchhelp code { background: #fff; border-radius: 5px; padding: 1px 5px; font-size: 11.5px; }
 .hint.warn { color: #A96C15; }
 
 /* ---------- 钩子 ---------- */
@@ -839,9 +849,14 @@ try {
              onkeydown="if(event.key==='Enter')searchCand()">
       <button id="btn-search" onclick="searchCand()">搜索</button>
     </div>
-    <div class="hint" style="margin-top:9px">
-      搜不到人？<a href="#" onclick="openZhihuPeopleSearch();return false">去知乎搜 TA 的用户名 ↗</a>
-      ——把 TA 的主页链接（<code style="font-size:11.5px">zhihu.com/people/xxx</code>）粘回上面最准。
+    <div class="searchhelp" id="search-help" style="display:none">
+      <div class="sh-t" id="sh-title"></div>
+      <div class="sh-b" id="sh-body"></div>
+      <div class="sh-acts">
+        <button class="ghost" onclick="openZhihuPeopleSearch()">去知乎搜 TA 的用户名 ↗</button>
+        <button class="ghost" onclick="focusNick()">把主页链接粘进来</button>
+      </div>
+      <div class="sh-tip">主页链接长这样：<code>zhihu.com/people/xxxx</code> —— 粘进来最准，而且不用猜名字。</div>
     </div>
 
     <div class="try">
@@ -1159,16 +1174,48 @@ function tryWho(name) {
   searchCand();
 }
 
+/** 搜不到人时的指路：知乎是按「内容」搜的，有些人的内容索引不到，
+ *  所以别只丢一句「没搜到」——告诉他换哪种方式更准。 */
+function showSearchHelp(query, hasCands) {
+  const box = $('search-help');
+  if (!box) return;
+  $('sh-title').textContent = hasCands
+    ? '没找到叫「' + query + '」的本人？'
+    : '没搜到「' + query + '」？';
+  $('sh-body').textContent = hasCands
+    ? '下面这些是「提到过 TA」的作者，未必是本人。知乎是按内容搜的，名字搜不到的人不少。'
+    : '知乎是按内容搜的，不是按人名 —— 有些人的内容索引不到，换个方式更快。';
+  box.style.display = 'block';
+}
+function hideSearchHelp() {
+  const box = $('search-help');
+  if (box) box.style.display = 'none';
+}
+function focusNick() {
+  const el = $('nick');
+  el.focus(); el.select();
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast('把 TA 的主页链接粘进来（zhihu.com/people/xxxx）', 3200);
+}
+
 async function searchCand() {
   const nick = $('nick').value.trim();
   if (!nick) { toast('先输入一个知乎昵称'); return; }
   $('btn-search').disabled = true;
-  $('cand-list').innerHTML = '<div class="hint">搜索中…</div>';
+  $('cand-list').innerHTML = '';
+  // 搜人可能要换几次词（实测最慢 20 秒），所以这里必须有会动的提示
+  const busyS = showBusy('cand-list', 'search', '正在找 TA');
   try {
     const d = await jpost('/api/candidates', { name: nick });
-    if (!d.ok) { $('cand-list').innerHTML = '<div class="err">' + esc(d.error) + '</div>'; return; }
+    busyS.stop();
+    if (!d.ok) {
+      $('cand-list').innerHTML = '<div class="err">' + esc(d.error) + '</div>';
+      showSearchHelp(nick, false);
+      return;
+    }
     renderCands(d.candidates, nick);
   } catch (e) {
+    busyS.stop();
     $('cand-list').innerHTML = '<div class="err">出错：' + esc(e.message) + '</div>';
   } finally { $('btn-search').disabled = false; }
 }
@@ -1199,6 +1246,12 @@ function renderCands(cands, query) {
   // 按主页 token 读出来的那个人是精确命中的（他的名字未必包含你输入的 token，比如 wenbo → 路过的鞋）
   const hits = cands.filter(c => c.by_token || (q && (c.name.trim() === q || c.name.includes(q))));
   const rest = cands.filter(c => !hits.includes(c));
+
+  // ⚠️ 判据必须是「有没有**完全同名**的人」：hits 用的是「名字包含」，
+  // 而「提到过 TA」的账号名里往往也含这几个字（比如「田渊栋的粉丝」）→ 会误判成搜到了。
+  const exactHit = cands.some(c => c.by_token || (q && c.name.trim() === q));
+  if (exactHit) hideSearchHelp();
+  else showSearchHelp(q, cands.length > 0);
 
   el.innerHTML = '';
   const head = document.createElement('div');
@@ -1503,7 +1556,8 @@ const BUSY_HINTS = {
   comment: ['在 TA 写过的内容里找能接的话…', '尽量不夸、只说人话…', '挑一句最不容易尴尬的开场…'],
   card:    ['把刚才那几句来回读一遍…', '试着说清 TA 是个什么样的人…', '再挑两个你可能没想到的点…'],
   match:   ['把两边关注的东西摆在一起…', '找重合的地方…', '想两句不尬的开场白…'],
-  search:  ['在知乎上翻…', '按作者名筛一遍…', '快到候选了…'],
+  search:  ['正在知乎搜这个名字…', '按作者名筛一遍…',
+            '这个名字不好搜？换个词再试一次…', '再换一种说法找找…', '快到候选了…'],
 };
 
 function showThinking(who, box = 'duel-log', kind = '') {

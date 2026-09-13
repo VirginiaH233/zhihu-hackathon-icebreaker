@@ -160,6 +160,46 @@ def _search_items(query: str, count: int = 10, retries: int = 2) -> list:
     return []
 
 
+# 「按名字搜内容」这个接口上限就是 10 条（传 30 直接 502，实测），
+# 而且同一个名字换个查询词，命中的作者能差一大截 ——
+# 实测：「王瑞恩」搜不到本人，「王瑞恩 文章」就能搜到。所以不够就换词再搜，合并去重。
+# ⚠️ 只留 3 个：实测「王瑞恩 文章」第 2 个就命中，5 个换词会让最坏情况涨到 20 秒+。
+# 时间预算比覆盖率重要 —— 搜不到的还能走「粘主页链接」。
+SEARCH_VARIANTS = ["{} 回答", "{} 文章", "{} 想法"]
+
+
+def _item_key(it: dict) -> str:
+    return ((it.get("AuthorSignature") or "") + "|" + clean(it.get("Title", ""))[:60])
+
+
+def _search_merged(name: str, enough) -> tuple:
+    """按名字搜；这批「不够」就换几种词再搜，合并去重。
+
+    enough(items) -> bool：这批够不够（找人是「有没有同名作者」，取料是「本人内容够几条」）。
+    先用名字搜一次就够的话，**不会有任何额外开销**（大多数人走这条）。
+    """
+    items = _search_items(name) or []
+    if enough(items):
+        return items, [name]
+    seen = {_item_key(it) for it in items}
+    used = [name]
+    for v in SEARCH_VARIANTS:
+        q = v.format(name)
+        try:
+            more = _search_items(q) or []
+        except Exception:
+            continue
+        used.append(q)
+        for it in more:
+            k = _item_key(it)
+            if k and k not in seen:
+                seen.add(k)
+                items.append(it)
+        if enough(items):
+            break
+    return items, used
+
+
 def _item_is_author(it: dict, name: str, signature: str) -> bool:
     """这条内容是不是目标作者本人写的。"""
     it_sig = (it.get("AuthorSignature") or "").strip()
@@ -196,9 +236,10 @@ def search_candidates(nickname: str) -> list:
             }]
         # token 读不出来（可能用户其实在输名字）→ 继续走下面的内容搜索
 
-    items = _search_items(nickname)
-    seen = {}
     key = nickname.strip()
+    items, _used = _search_merged(
+        nickname, lambda its: any((x.get("AuthorName") or "").strip() == key for x in its))
+    seen = {}
     for it in items:
         name = it.get("AuthorName") or ""
         sig = it.get("AuthorSignature") or ""
@@ -226,7 +267,9 @@ def take_by_signature(name: str, signature: str) -> list:
     签名是知乎用户的主页唯一标识（如 liangbianyao），用它能精确区分同名作者。
     注意：签名是英文 token，直接拿去搜内容搜不到——要用「名字」搜，再按签名筛。
     """
-    items = _search_items(name)
+    items, _used = _search_merged(
+        name,
+        lambda its: len([x for x in its if _item_is_author(x, name, signature)]) >= 6)
     pool = [it for it in items if _item_is_author(it, name, signature)]
     lib, seen = [], set()
     for it in pool:
