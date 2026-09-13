@@ -28,3 +28,4 @@ data/
 logs/dev-server.log
 logs/deploy-tmp-server.log
 logs/*.out
+logs/deploy-run*.log

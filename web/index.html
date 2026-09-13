@@ -614,8 +614,6 @@ button.wide { width: 100%; }
 .gate-sub strong { color: var(--ink); }
 .gate-cta { margin-top: 26px; display: flex; flex-direction: column; gap: 10px; }
 .gate-tiny { font-size: 12.5px; color: var(--sub); text-align: center; margin: 0; line-height: 1.7; }
-.gate-link { color: var(--brand); font-weight: 600; cursor: pointer; border-bottom: 1px dashed var(--line-strong); }
-.gate-link:hover { border-bottom-color: var(--brand); }
 .gate-foot { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line-soft);
   font-size: 12px; color: var(--sub); line-height: 1.8; text-align: center; }
 
@@ -641,22 +639,6 @@ button.wide { width: 100%; }
   50%     { box-shadow: 0 0 0 8px rgba(232,163,61,.16), 0 6px 20px rgba(232,163,61,.40); }
 }
 
-/* 示例（虚构；零 LLM、零隐私） */
-.sample { margin-top: 26px; background: var(--card); border: 1px solid var(--line);
-  border-radius: var(--r); padding: 20px; box-shadow: 0 1px 3px rgba(31,45,61,.05); }
-.sample-h { font-size: 13px; color: var(--sub); line-height: 1.85; }
-.sample-h b { color: var(--danger); }
-.sample-block { margin-top: 16px; }
-.sample-lb { font-size: 12px; font-weight: 700; color: var(--brand); letter-spacing: .04em; margin-bottom: 8px; }
-.sample-chip { background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--r-sm);
-  padding: 11px 13px; font-size: 13.5px; margin-bottom: 8px;
-  display: flex; justify-content: space-between; gap: 10px; align-items: center; }
-.sample-chip span { font-size: 11.5px; color: var(--sub); white-space: nowrap; }
-.sample-quote { background: var(--accent-soft); border: 1px solid var(--accent-line);
-  border-radius: var(--r-sm); padding: 14px 16px; font-size: 14px; line-height: 1.9; }
-.sample-from { font-size: 11.5px; color: var(--sub); margin-top: 8px; line-height: 1.7; }
-.sample-foot { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft);
-  font-size: 12.5px; color: var(--sub); }
 
 /* 电脑：左右分栏（文案在左、牌在右）；手机：牌在上、文案在下 */
 @media (min-width: 900px) {
@@ -670,7 +652,6 @@ button.wide { width: 100%; }
   .gate-tiny { text-align: left; }
   .gcard { width: 118px; height: 178px; }
   .gcard .gface { font-size: 13.5px; }
-  .sample { margin-top: 40px; padding: 26px 30px; }
 }
 </style>
 </head>
@@ -691,7 +672,6 @@ button.wide { width: 100%; }
       <div class="gate-cta">
         <button class="accent wide" id="gate-btn" onclick="zhihuLogin()">用知乎账号登录</button>
         <p class="gate-tiny">只读你的公开创作 · 不碰私信、不碰关注列表</p>
-        <p class="gate-tiny"><span class="gate-link" onclick="toggleSample()">先看看长什么样 →</span></p>
       </div>
     </div>
 
@@ -703,28 +683,6 @@ button.wide { width: 100%; }
       </div>
       <div class="deck-hint" id="gate-hint">点一下那三张牌</div>
     </div>
-  </div>
-
-  <!-- 示例（虚拟，零 LLM；点「先看看长什么样」展开） -->
-  <div class="sample" id="gate-sample" style="display:none">
-    <div class="sample-h">示例 —— 如果 TA 是「@林一」（<b>虚构的人，内容全是编的</b>），你能拿到这些东西：</div>
-
-    <div class="sample-block">
-      <div class="sample-lb">他最在行的</div>
-      <div class="sample-chip">聊「一个人怎么把兴趣变成专业」<span>他写过 3 篇</span></div>
-      <div class="sample-chip">聊「小团队怎么活下来」<span>他写过 2 篇</span></div>
-    </div>
-
-    <div class="sample-block">
-      <div class="sample-lb">你可以直接发出去的一句话</div>
-      <div class="sample-quote">
-        「你写的那句『先把东西做出来，再谈热爱』我记了很久。我最近也在纠结要不要转行做这件事，
-        你当时是怎么下决心的？」
-      </div>
-      <div class="sample-from">—— 针对他《我是怎么从爱好者变成从业者的》那篇 · 点开就能跳到原文</div>
-    </div>
-
-    <div class="sample-foot">登录后，把「@林一」换成你真正想认识的那个人。</div>
   </div>
 
   <div class="gate-foot">分身基于公开内容构建，不代表本人想法 · 我们做连接，不做评价</div>
@@ -1954,12 +1912,6 @@ function gateShow(on) {
   document.getElementById('gate').style.display = on ? 'block' : 'none';
   document.getElementById('app').style.display = on ? 'none' : 'block';
   if (on) window.scrollTo({ top: 0 });
-}
-function toggleSample() {
-  const el = document.getElementById('gate-sample');
-  const open = el.style.display === 'none';
-  el.style.display = open ? 'block' : 'none';
-  if (open) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 /** 三张牌：点开是「卡在喉咙里的话」；翻完把注意力推到登录按钮 */
 (function gateDeck() {
