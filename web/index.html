@@ -715,94 +715,274 @@ button.wide { width: 100%; }
 .egg-t b { color: var(--ink); }
 .egg-t span { font-size: 12.5px; }
 /* ============================================================
-   登录门（v5 · 登录前置）
-   颜色一律用产品自己的「清晨海面」变量，不另起一套
+   登录门（v6 · 破晓版）：夜→破晓，翻牌可逆，浮动登录按钮
+   场景与动效全部作用域限定在 #gate 内，不碰产品其他部分
    ============================================================ */
-#gate { max-width: 1040px; padding: 34px 2px 40px; }
-.gate-grid { display: flex; flex-direction: column-reverse; gap: 26px; }
-.gate-brand { font-size: 14px; font-weight: 700; letter-spacing: .04em; color: var(--ink-soft);
-  display: flex; align-items: center; gap: 10px; }
-.gate-brand em { font-style: normal; color: var(--brand); }
-.gate-tag { font-size: 11.5px; font-weight: 600; color: var(--brand); background: var(--brand-soft);
-  border-radius: 999px; padding: 4px 10px; }
-.gate-hook { font-size: 33px; line-height: 1.34; font-weight: 800; letter-spacing: -.01em; margin: 20px 0 0; }
-.gate-hook .hl { color: var(--accent); }
-.gate-sub { font-size: 14.5px; line-height: 1.85; color: var(--sub); margin: 14px 0 0; }
-.gate-sub strong { color: var(--ink); }
-.gate-cta { margin-top: 26px; display: flex; flex-direction: column; gap: 10px; }
-.gate-tiny { font-size: 12.5px; color: var(--sub); text-align: center; margin: 0; line-height: 1.7; }
-.gate-foot { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line-soft);
-  font-size: 12px; color: var(--sub); line-height: 1.8; text-align: center; }
-
-/* 三张牌（翻牌：手机点、电脑点/悬停都能触发，不依赖 hover） */
-.gate-visual { text-align: center; }
-.deck { display: flex; justify-content: center; gap: 12px; }
-.gcard { position: relative; width: 96px; height: 146px; cursor: pointer;
-  transform-style: preserve-3d; transition: transform .55s cubic-bezier(.2,.8,.2,1); }
-.gcard:hover { transform: translateY(-5px); }
-.gcard.flip { transform: rotateY(180deg); }
-.gcard .gface { position: absolute; inset: 0; border-radius: 14px; backface-visibility: hidden;
-  display: flex; align-items: center; justify-content: center; padding: 11px; text-align: center;
-  font-size: 12.5px; line-height: 1.6; }
-.gcard .gback { background: linear-gradient(160deg, var(--brand) 0%, var(--brand-deep) 100%);
-  color: #fff; font-size: 26px; font-weight: 700; box-shadow: 0 4px 14px rgba(62,124,177,.28); }
-.gcard .gfront { background: var(--card); border: 1px solid var(--line); color: var(--ink);
-  transform: rotateY(180deg); box-shadow: 0 2px 8px rgba(31,45,61,.06); }
-.deck-hint { margin-top: 14px; font-size: 12.5px; color: var(--sub); min-height: 18px; }
-.deck-hint.done { color: var(--brand-deep); font-weight: 700; }
-#gate-btn.pulse { animation: gpulse 1.7s ease-in-out infinite; }
-@keyframes gpulse {
-  0%,100% { box-shadow: 0 2px 8px rgba(232,163,61,.30); }
-  50%     { box-shadow: 0 0 0 8px rgba(232,163,61,.16), 0 6px 20px rgba(232,163,61,.40); }
+#gate {
+  position: fixed; inset: 0; z-index: 60; overflow-y: auto;
+  --serif: "FangSong","仿宋","STFangsong","Songti SC","SimSun",serif;
+  --ice1:#F4FAFE; --ice2:#E3F0FA; --ice3:#CFE4F4; --ice-line:#BFDCF0;
+  --sky-a:#233A56; --sky-b:#3A5878; --sky-c:#6E8FAC;
+  --horizon:rgba(255,196,120,0);
+  --sea-a:#2C4863; --sea-b:#1E3550;
+  --ink-on:#F2F8FD; --sub-on:#C0D6E8;
+  background: var(--sea-b); color: var(--ink-on);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background 2.2s ease;
 }
+body.gs1 #gate { --sky-a:#2B4664;--sky-b:#4A6C8E;--sky-c:#8FAEC8;--horizon:rgba(255,196,120,.28);--sea-a:#33526F;--sea-b:#24405C; }
+body.gs2 #gate { --sky-a:#3D5F80;--sky-b:#6F94B2;--sky-c:#C6D9E6;--horizon:rgba(255,196,120,.55);--sea-a:#3F5F7C;--sea-b:#2E4C68;--sub-on:#D6E6F2; }
+body.gs3 #gate { --sky-a:#7FA6C4;--sky-b:#BAD3E4;--sky-c:#FBE3C0;--horizon:rgba(255,204,130,.9);--sea-a:#5E86A6;--sea-b:#476C8C;--ink-on:#FFFFFF;--sub-on:#F4FAFE; }
 
+#gate .g-scene { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+#gate .g-bgfill { position: absolute; inset: 0;
+  background: linear-gradient(180deg, var(--sky-a) 0%, var(--sky-b) 38%, var(--sky-c) 62%, var(--sea-a) 62.2%, var(--sea-b) 100%);
+  transition: background 2.2s ease; }
+#gate .g-horizon { position: absolute; left: -10vw; right: -10vw; top: 62vh; height: 1.5px; transform: translateY(-50%);
+  background: rgba(255,240,220,.5);
+  box-shadow: 0 0 40px 14px var(--horizon), 0 0 120px 46px var(--horizon);
+  transition: box-shadow 2.2s ease; }
+#gate .g-sun { position: absolute; left: 50%; top: 62vh; width: 120px; height: 120px; border-radius: 50%;
+  transform: translate(-50%,30px); opacity: 0;
+  background: radial-gradient(circle,#FFEFC9 0%,#FFD98F 46%,rgba(255,217,143,0) 72%);
+  filter: blur(3px); transition: transform 3.2s cubic-bezier(.2,.7,.3,1), opacity 2.6s ease; }
+body.gs3 #gate .g-sun { transform: translate(-50%,-64px); opacity: 1; animation: g-sunGlow 5.5s ease-in-out 3.4s infinite; }
+@keyframes g-sunGlow { 0%,100% { filter: blur(3px) brightness(1); } 50% { filter: blur(4px) brightness(1.12); } }
+#gate .g-sunpath { position: absolute; left: 50%; top: 62vh; width: 120px; height: 38vh; transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(255,220,150,.5), rgba(255,220,150,0));
+  filter: blur(10px); opacity: 0; transition: opacity 2.6s ease; }
+body.gs3 #gate .g-sunpath { opacity: .75; }
 
-/* 电脑：左右分栏（文案在左、牌在右）；手机：牌在上、文案在下 */
-@media (min-width: 900px) {
-  #gate { padding: 64px 2px 50px; }
-  .gate-grid { flex-direction: row; align-items: center; gap: 56px; }
-  .gate-main { flex: 1; min-width: 0; }
-  .gate-visual { flex: 0 0 auto; }
-  .gate-hook { font-size: 46px; }
-  .gate-sub { font-size: 16px; max-width: 430px; }
-  .gate-cta { max-width: 340px; }
-  .gate-tiny { text-align: left; }
-  .gcard { width: 118px; height: 178px; }
-  .gcard .gface { font-size: 13.5px; }
+#gate .g-skyclip { position: absolute; left: 0; right: 0; top: 0; height: 62vh; overflow: hidden; }
+#gate .g-starfield { position: absolute; left: 50%; top: 100%; width: 240vmax; height: 240vmax;
+  transform: translate(-50%,-50%); animation: g-spin 300s linear infinite; transition: opacity 2s; }
+@keyframes g-spin { from { transform: translate(-50%,-50%) rotate(0deg); } to { transform: translate(-50%,-50%) rotate(360deg); } }
+body.gs2 #gate .g-starfield { opacity: .35; }
+body.gs3 #gate .g-starfield { opacity: 0; }
+#gate .g-star { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff;
+  animation: g-twinkle 3.4s ease-in-out infinite; }
+@keyframes g-twinkle { 0%,100% { opacity: .85; } 50% { opacity: .15; } }
+#gate .g-meteor { position: absolute; width: 120px; height: 1.5px; border-radius: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,.9), rgba(255,255,255,0));
+  transform: rotate(24deg); opacity: 0; animation: g-meteor 11s ease-in 4s infinite; }
+@keyframes g-meteor { 0%,92%,100% { opacity: 0; } 93% { opacity: .9; transform: rotate(24deg) translateX(0); }
+  97% { opacity: 0; transform: rotate(24deg) translateX(26vw); } }
+body.gs2 #gate .g-meteor, body.gs3 #gate .g-meteor { opacity: 0 !important; animation: none; }
+
+#gate .g-cloud { position: absolute; border-radius: 50%; filter: blur(18px);
+  background: rgba(255,255,255,.75); opacity: 0; transition: opacity 2.6s ease; }
+body.gs2 #gate .g-cloud { opacity: .3; }
+body.gs3 #gate .g-cloud { opacity: .65; }
+#gate .g-cl1 { width: 34vw; height: 5vh; left: 6vw; top: 14vh; animation: g-cloudDrift 64s linear infinite; }
+#gate .g-cl2 { width: 26vw; height: 4vh; left: 52vw; top: 8vh; animation: g-cloudDrift 82s linear infinite reverse; }
+#gate .g-cl3 { width: 20vw; height: 3.5vh; left: 30vw; top: 24vh; animation: g-cloudDrift 70s linear infinite; }
+@keyframes g-cloudDrift { from { transform: translateX(-6vw); } to { transform: translateX(14vw); } }
+#gate .g-bird { position: absolute; width: 16px; height: 6px; opacity: 0; }
+#gate .g-bird::before, #gate .g-bird::after { content: ""; position: absolute; top: 0; width: 9px; height: 5px;
+  border: 1.6px solid rgba(70,100,125,.85); border-bottom: none; border-left: none;
+  border-radius: 0 100% 0 0; transform: rotate(-12deg); }
+#gate .g-bird::after { left: 8px; transform: scaleX(-1) rotate(-12deg); }
+body.gs3 #gate .g-bird { animation: g-fly 26s linear infinite; }
+#gate .g-b1 { left: -6vw; top: 20vh; }
+#gate .g-b2 { left: -6vw; top: 15vh; animation-delay: 9s !important; transform: scale(.7); }
+@keyframes g-fly { 0% { opacity: 0; transform: translate(0,0); } 4% { opacity: .9; }
+  48% { opacity: .9; transform: translate(58vw,-7vh); } 52% { opacity: 0; transform: translate(64vw,-8vh); }
+  100% { opacity: 0; transform: translate(64vw,-8vh); } }
+
+#gate .g-glint { position: absolute; height: 2px; border-radius: 2px; background: rgba(255,255,255,.8);
+  filter: blur(2px); opacity: 0; animation: g-glint 7s ease-in-out infinite; }
+@keyframes g-glint { 0%,100% { opacity: 0; } 12% { opacity: .7; } 30% { opacity: .12; } 46% { opacity: 0; } }
+#gate .g-glint.gday { display: none; }
+body.gs2 #gate .g-glint.gday, body.gs3 #gate .g-glint.gday { display: block; }
+body.gs3 #gate .g-glint { animation-duration: 4.5s; }
+#gate .g-sparkle { position: absolute; width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(255,232,170,.95); filter: blur(1px); opacity: 0; }
+body.gs3 #gate .g-sparkle { animation: g-sparkle 3.2s ease-in-out infinite; }
+@keyframes g-sparkle { 0%,100% { opacity: 0; transform: translateY(0); } 30% { opacity: .95; transform: translateY(-2px); } 55% { opacity: .2; } }
+
+#gate .g-main { position: relative; z-index: 1; min-height: 100vh; min-height: 100svh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: clamp(14px,2.5vh,40px) 20px clamp(130px,20vh,160px); text-align: center; }
+#gate .g-brand { font-size: 11px; font-weight: 700; letter-spacing: .34em; color: var(--sub-on);
+  transition: color 2s; opacity: 0; transform: translateY(16px); animation: g-rise .9s ease .15s forwards; }
+#gate .g-hook { font-family: var(--serif); font-size: clamp(24px, min(7vw,5.6vh), 58px); font-weight: 700;
+  line-height: 1.42; margin: clamp(10px,2vh,22px) 0 0; letter-spacing: .06em; color: var(--ink-on);
+  transition: color 2s; opacity: 0; transform: translateY(16px); animation: g-rise 1s ease .4s forwards;
+  text-shadow: 0 2px 26px rgba(20,40,60,.35); }
+#gate .g-hook em { font-style: normal; color: #FFC46E; text-shadow: 0 0 26px rgba(255,196,110,.45); }
+#gate .g-sub { font-size: clamp(13px,1.7vw,15px); color: var(--sub-on); line-height: 1.9;
+  margin: clamp(8px,1.6vh,16px) 0 0; max-width: 560px; transition: color 2s;
+  opacity: 0; transform: translateY(16px); animation: g-rise 1s ease .65s forwards; }
+#gate .g-sub b { color: var(--ink-on); font-weight: 600; transition: color 2s; }
+@keyframes g-rise { to { opacity: 1; transform: translateY(0); } }
+#gate .g-stage { margin-top: clamp(6px,1.2vh,10px); font-size: 12px; letter-spacing: .22em; color: var(--sub-on);
+  opacity: 0; transform: translateY(10px); animation: g-rise 1s ease 2.2s forwards; transition: color 2s; }
+
+#gate .g-deck { display: flex; align-items: flex-end; gap: clamp(14px,3vw,30px); margin-top: clamp(14px,4vh,6vh); }
+#gate .g-slot { opacity: 0; transform: var(--tf) translateY(50px) scale(.92);
+  animation: g-deal .8s cubic-bezier(.2,.85,.3,1.06) forwards; }
+#gate .g-slot:nth-child(1) { --tf: rotate(-4deg) translateY(5px); animation-delay: 1.0s; }
+#gate .g-slot:nth-child(2) { --tf: translateY(-14px); z-index: 2; animation-delay: 1.18s; }
+#gate .g-slot:nth-child(3) { --tf: rotate(4deg) translateY(5px); animation-delay: 1.36s; }
+@keyframes g-deal { to { opacity: 1; transform: var(--tf) translateY(0) scale(1); } }
+#gate .g-deck.ginvite .g-slot:nth-child(2) .gcard { animation: g-nudge 4.2s ease-in-out 2.8s infinite; }
+@keyframes g-nudge { 0%,100% { transform: none; } 4% { transform: translateY(-7px) rotate(-1.6deg); }
+  8% { transform: translateY(-7px) rotate(1.4deg); } 12% { transform: translateY(-7px) rotate(-.8deg); } 16% { transform: none; } }
+
+#gate .gcard { position: relative; width: clamp(96px, min(24vw,22vh), 168px); aspect-ratio: 5/7;
+  cursor: pointer; perspective: 1100px;
+  filter: drop-shadow(0 3px 3px rgba(10,25,40,.3)) drop-shadow(0 22px 30px rgba(10,25,40,.25));
+  transition: filter .4s; }
+#gate .gcard:hover { filter: drop-shadow(0 4px 4px rgba(10,25,40,.32)) drop-shadow(0 30px 40px rgba(10,25,40,.3)); }
+#gate .g-inner { position: absolute; inset: 0; transform-style: preserve-3d;
+  transition: transform .78s cubic-bezier(.25,.9,.28,1.04); }
+#gate .gcard.flip .g-inner { transform: rotateY(180deg); }
+#gate .gcard:hover .g-inner { transform: rotateY(0) translateY(-8px); }
+#gate .gcard.flip:hover .g-inner { transform: rotateY(180deg) translateY(-8px); }
+#gate .g-face { position: absolute; inset: 0; border-radius: 18px; backface-visibility: hidden; overflow: hidden; }
+
+#gate .g-reflect { position: absolute; left: 6%; right: 6%; top: calc(100% + 8px); height: 34%; border-radius: 18px;
+  background: linear-gradient(180deg, rgba(230,244,252,.28), rgba(230,244,252,0));
+  filter: blur(6px); transform: scaleY(-1); }
+
+#gate .g-back { background:
+    radial-gradient(120% 90% at 20% 8%, rgba(255,255,255,.9) 0%, rgba(255,255,255,0) 44%),
+    linear-gradient(158deg, var(--ice1) 0%, var(--ice2) 52%, var(--ice3) 100%);
+  border: 1px solid var(--ice-line);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.55), inset 0 0 20px rgba(255,255,255,.5); }
+#gate .g-q { position: absolute; left: 50%; top: 46%; transform: translate(-50%,-50%) rotate(-7deg);
+  font-family: Georgia,"Times New Roman",serif; font-size: clamp(44px,10vw,68px); font-weight: 600;
+  color: rgba(42,86,128,.72); line-height: 1;
+  text-shadow: 0 0 14px rgba(255,255,255,.85), 0 2px 10px rgba(42,86,128,.22); }
+#gate .g-back::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(112deg, transparent 0 34%, rgba(255,255,255,.78) 46%, transparent 57%); }
+#gate .g-crack { position: absolute; height: 1.5px; transform-origin: left center;
+  background: linear-gradient(90deg, rgba(255,255,255,.95), rgba(255,255,255,0)); }
+#gate .gc1 { left: 13%; top: 20%; width: 36%; transform: rotate(22deg); }
+#gate .gc2 { left: 50%; top: 72%; width: 32%; transform: rotate(-16deg); }
+#gate .gc3 { left: 8%; top: 58%; width: 26%; transform: rotate(30deg); }
+#gate .gc4 { left: 66%; top: 26%; width: 24%; transform: rotate(-24deg); }
+
+#gate .g-front { transform: rotateY(180deg);
+  background:
+    radial-gradient(130% 55% at 50% -18%, rgba(255,255,255,.62) 0%, rgba(255,255,255,0) 52%),
+    radial-gradient(150% 75% at 50% 116%, rgba(168,128,54,.14) 0%, rgba(168,128,54,0) 52%),
+    linear-gradient(172deg, #FFF9E6 0%, #FBF0C6 50%, #F1DE9E 100%);
+  border: 1px solid rgba(200,170,96,.45);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.5), inset 0 0 30px rgba(255,255,255,.3);
+  display: flex; flex-direction: column; padding: 30px 18px 24px; text-align: center; }
+#gate .g-sentence { position: relative; flex: 1; display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-size: clamp(13px,2.6vw,18px); font-weight: 500; line-height: 1.75;
+  letter-spacing: .05em; color: #5A4228; text-shadow: 0 1px 0 rgba(255,255,255,.35); }
+#gate .g-idx { position: absolute; top: 12px; left: 14px; font-family: Georgia,serif;
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; color: rgba(146,110,58,.85);
+  text-shadow: 0 1px 0 rgba(255,255,255,.4); }
+
+#gate .g-hint { margin-top: clamp(12px,3vh,34px); font-size: 13px; color: var(--sub-on); letter-spacing: .06em;
+  opacity: 0; transform: translateY(10px); animation: g-rise 1s ease 2.4s forwards;
+  transition: opacity .5s, color 2s; }
+#gate .g-hint b { color: var(--ink-on); font-weight: 600; transition: color 2s; }
+
+#gate .g-dock { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 10;
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  opacity: 0; pointer-events: none; transition: opacity .8s ease; }
+body.gseen #gate .g-dock { opacity: 1; pointer-events: auto; }
+#gate .g-docknote { font-size: 13px; font-weight: 600; letter-spacing: .03em; color: var(--ink-on);
+  text-shadow: 0 1px 10px rgba(20,40,60,.4); opacity: 0; transform: translateY(6px);
+  transition: opacity .7s, transform .7s, color 2s; }
+body.gready #gate .g-docknote { opacity: 1; transform: none; }
+#gate .g-btn { border: none; cursor: pointer; font-family: inherit; font-weight: 700; font-size: 15px;
+  padding: 15px 30px; border-radius: 999px;
+  background: rgba(242,206,147,.9); color: #6B5222;
+  box-shadow: 0 4px 16px rgba(15,35,55,.3);
+  backdrop-filter: blur(6px);
+  transition: background .6s, color .6s, box-shadow .6s;
+  animation: g-bob 3.6s ease-in-out infinite; }
+@keyframes g-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 6px 26px rgba(232,163,61,.55), inset 0 1px 0 rgba(255,255,255,.35); }
+#gate .g-btn:hover { box-shadow: 0 8px 30px rgba(232,163,61,.6); }
+#gate .g-tiny { font-size: 11.5px; color: var(--sub-on); letter-spacing: .02em; line-height: 1.7;
+  text-shadow: 0 1px 6px rgba(20,40,60,.4); transition: color 2s; }
+
+@media (max-width: 840px) {
+  #gate .g-main { padding: 40px 14px clamp(130px,20vh,150px); }
+  #gate .g-deck { margin-top: 4.5vh; }
+}
+@media (max-height: 660px) {
+  #gate .gcard { width: clamp(84px, min(20vw,19vh), 128px); }
+  #gate .g-hook { font-size: clamp(20px,4.4vh,34px); }
+  #gate .g-deck { margin-top: 1.6vh; }
+  #gate .g-hint { margin-top: 10px; }
+  #gate .g-stage { display: none; }
+  #gate .g-main { padding-bottom: 88px; }
+  #gate .g-dock { bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #gate *, #gate *::before, #gate *::after { animation: none !important; transition: none !important; }
+  #gate .g-brand, #gate .g-hook, #gate .g-sub, #gate .g-slot, #gate .g-hint, #gate .g-stage { opacity: 1; transform: var(--tf, none); }
+  #gate .g-dock { opacity: 1; pointer-events: auto; }
 }
 </style>
 </head>
 <body>
 
-<!-- ========== 登录门（v5：登录前置，未登录只能看到这一屏）========== -->
-<div class="wrap" id="gate">
-  <div class="gate-grid">
-    <div class="gate-main">
-      <div class="gate-brand">社恐<em>破冰船</em><span class="gate-tag">知乎黑客松 2026</span></div>
-
-      <h1 class="gate-hook">有多少话，<br>卡在<span class="hl">喉咙里</span>？</h1>
-      <p class="gate-sub">
-        输入一个你想认识的知乎答主，让 TA 的分身先跟你聊两句 ——
-        最后给你一句<strong>能直接发出去的话</strong>。
-      </p>
-
-      <div class="gate-cta">
-        <button class="accent wide" id="gate-btn" onclick="zhihuLogin()">用知乎账号登录</button>
-        <p class="gate-tiny">只读你的公开创作 · 不碰私信、不碰关注列表</p>
-      </div>
+<!-- ========== 登录门（v6：破晓版，未登录只能看到这一屏）========== -->
+<div id="gate">
+  <div class="g-scene" id="gate-scene">
+    <div class="g-bgfill"></div>
+    <div class="g-skyclip"><div class="g-starfield" id="gate-starfield"></div>
+      <div class="g-meteor" style="left:14vw;top:12vh"></div>
+      <div class="g-meteor" style="left:58vw;top:22vh;animation-delay:5s"></div>
+      <div class="g-meteor" style="left:34vw;top:6vh;animation-delay:8s;animation-duration:9s"></div>
+      <div class="g-meteor" style="left:76vw;top:16vh;animation-delay:2.5s;animation-duration:13s"></div>
     </div>
-
-    <div class="gate-visual">
-      <div class="deck" id="gate-deck">
-        <div class="gcard"><div class="gface gback">？</div><div class="gface gfront">「我看过你那篇… 想问一句」</div></div>
-        <div class="gcard"><div class="gface gback">？</div><div class="gface gfront">「这事我也踩过坑，你怎么想？」</div></div>
-        <div class="gcard"><div class="gface gback">？</div><div class="gface gfront">「我不太懂，能给我讲讲吗」</div></div>
-      </div>
-      <div class="deck-hint" id="gate-hint">点一下那三张牌</div>
-    </div>
+    <div class="g-cloud g-cl1"></div><div class="g-cloud g-cl2"></div><div class="g-cloud g-cl3"></div>
+    <div class="g-bird g-b1"></div><div class="g-bird g-b2"></div>
+    <div class="g-horizon"></div>
+    <div class="g-sun"></div>
+    <div class="g-sunpath"></div>
   </div>
 
-  <div class="gate-foot">分身基于公开内容构建，不代表本人想法 · 我们做连接，不做评价</div>
+  <main class="g-main">
+    <div class="g-brand">社恐破冰船 · 知乎黑客松 2026</div>
+    <h1 class="g-hook">逛知乎时，多少句话，<br><em>打完又删了</em>？</h1>
+    <p class="g-sub">输入一个你想认识的知乎答主，让 TA 的分身先陪你聊两句 —— 最后给你一句<b>敢发出去的评论</b>。</p>
+    <div class="g-stage" id="gate-stage">夜里 · 删掉的话还冻着</div>
+
+    <div class="g-deck ginvite" id="gate-deck">
+      <div class="g-slot"><div class="gcard" onclick="gateFlip(this)">
+        <div class="g-inner">
+          <div class="g-face g-back"><div class="g-q">?</div><div class="g-crack gc1"></div><div class="g-crack gc2"></div><div class="g-crack gc3"></div><div class="g-crack gc4"></div></div>
+          <div class="g-face g-front"><div class="g-idx">01</div><div class="g-sentence">你那篇我看了三遍，有个地方没想通</div></div>
+        </div>
+        <div class="g-reflect"></div>
+      </div></div>
+      <div class="g-slot"><div class="gcard" onclick="gateFlip(this)">
+        <div class="g-inner">
+          <div class="g-face g-back"><div class="g-q">?</div><div class="g-crack gc1"></div><div class="g-crack gc2"></div><div class="g-crack gc3"></div><div class="g-crack gc4"></div></div>
+          <div class="g-face g-front"><div class="g-idx">02</div><div class="g-sentence">这事我也踩过坑，想听你怎么看</div></div>
+        </div>
+        <div class="g-reflect"></div>
+      </div></div>
+      <div class="g-slot"><div class="gcard" onclick="gateFlip(this)">
+        <div class="g-inner">
+          <div class="g-face g-back"><div class="g-q">?</div><div class="g-crack gc1"></div><div class="g-crack gc2"></div><div class="g-crack gc3"></div><div class="g-crack gc4"></div></div>
+          <div class="g-face g-front"><div class="g-idx">03</div><div class="g-sentence">这块我不太懂，能请教你一下吗？</div></div>
+        </div>
+        <div class="g-reflect"></div>
+      </div></div>
+    </div>
+
+    <div class="g-hint" id="gate-hint">你删掉的那些话，都冻在这儿 —— <b>点一张看看</b></div>
+  </main>
+
+  <div class="g-dock">
+    <div class="g-docknote" id="gate-docknote">这些话，都能替你说出口 ——</div>
+    <button class="g-btn" id="gate-btn" onclick="zhihuLogin()">用知乎账号登录</button>
+    <div class="g-tiny">只读公开创作 · 不碰私信 · 分身不代表本人想法</div>
+  </div>
 </div>
 
 <div class="wrap" id="app" style="display:none">
@@ -2639,24 +2819,57 @@ function gateShow(on) {
   document.getElementById('app').style.display = on ? 'none' : 'block';
   if (on) window.scrollTo({ top: 0 });
 }
-/** 三张牌：点开是「卡在喉咙里的话」；翻完把注意力推到登录按钮 */
-(function gateDeck() {
-  const deck = document.getElementById('gate-deck');
-  const hint = document.getElementById('gate-hint');
-  let n = 0;
-  deck.querySelectorAll('.gcard').forEach(c => {
-    c.onclick = () => {
-      if (c.classList.contains('flip')) return;
-      c.classList.add('flip'); n++;
-      if (n < 3) { hint.textContent = `还剩 ${3 - n} 张`; }
-      else {
-        hint.textContent = '要不要让人替你，说第一句？';
-        hint.classList.add('done');
-        document.getElementById('gate-btn').classList.add('pulse');
-      }
-    };
-  });
+/** 三张牌（破晓版）：翻开天亮一档、翻回去天黑一档；场景元素（星/波光/碎金）动态生成 */
+(function gateScene() {
+  var field = document.getElementById('gate-starfield');
+  if (field) {
+    for (var i=0;i<210;i++){
+      var s = document.createElement('div');
+      s.className = 'g-star';
+      s.style.left = (Math.random()*100)+'%';
+      s.style.top  = (Math.random()*100)+'%';
+      s.style.animationDelay = (Math.random()*3.4)+'s';
+      s.style.opacity = (.25+Math.random()*.75);
+      if (Math.random()<.16){ s.style.width='3px'; s.style.height='3px'; }
+      field.appendChild(s);
+    }
+  }
+  var scene = document.getElementById('gate-scene');
+  for (var j=0;j<14;j++){
+    var g = document.createElement('div');
+    g.className = 'g-glint' + (j>=5 ? ' gday' : '');
+    g.style.left = (8+Math.random()*84)+'vw';
+    g.style.bottom = (4+Math.random()*26)+'vh';
+    g.style.width = (36+Math.random()*60)+'px';
+    g.style.animationDelay = (Math.random()*7)+'s';
+    scene.appendChild(g);
+  }
+  for (var k=0;k<10;k++){
+    var p = document.createElement('div');
+    p.className = 'g-sparkle';
+    p.style.left = 'calc(50vw + ' + ((Math.random()-.5)*110) + 'px)';
+    p.style.top  = (63 + Math.random()*26)+'vh';
+    p.style.animationDelay = (Math.random()*3.2)+'s';
+    scene.appendChild(p);
+  }
 })();
+
+var _gateStageText = ['夜里 · 删掉的话还冻着','微光 · 冰开始松动','快了 · 天在亮','破晓 · 该发出去了'];
+var _gateHintText = ['又删了？天也跟着黑了','天亮了一点。还有两张','地平线亮了。最后一张','破晓了。'];
+function gateFlip(el){
+  el.classList.toggle('flip');
+  var deck = document.getElementById('gate-deck');
+  if (deck) deck.classList.remove('ginvite');
+  document.body.classList.add('gseen');
+  var n = document.querySelectorAll('#gate .gcard.flip').length;
+  document.body.classList.remove('gs1','gs2','gs3','gready');
+  if (n>0) document.body.classList.add('gs'+n);
+  if (n===3) document.body.classList.add('gready');
+  var stage = document.getElementById('gate-stage');
+  var hint = document.getElementById('gate-hint');
+  if (stage) stage.textContent = _gateStageText[n];
+  if (hint) hint.innerHTML = (n===0) ? _gateHintText[0] : _gateHintText[n];
+}
 async function zhihuLogin() {
   try {
     const d = await (await fetch('/api/oauth/url')).json();
