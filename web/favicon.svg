@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5E9BCB"/>
+      <stop offset="100%" stop-color="#2C5F8D"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F5C066"/>
+      <stop offset="100%" stop-color="#E8A33D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 底：圆角方 -->
+  <rect x="0" y="0" width="256" height="256" rx="58" fill="url(#sea)"/>
+
+  <!-- 远山/冰原 -->
+  <path d="M0 168 L52 138 L92 160 L140 122 L196 152 L256 128 L256 256 L0 256 Z"
+        fill="#FFFFFF" opacity="0.14"/>
+
+  <!-- 阳光 -->
+  <circle cx="196" cy="64" r="26" fill="url(#sun)" opacity="0.92"/>
+
+  <!-- 船体：破冰船的 V 形船头 -->
+  <path d="M128 74 L172 150 L128 178 L84 150 Z" fill="#FFFFFF"/>
+  <path d="M128 96 L152 142 L128 160 L104 142 Z" fill="#5E9BCB" opacity="0.55"/>
+
+  <!-- 冰层：被撞开的裂纹 -->
+  <path d="M44 186 L84 186 L96 176 L128 190 L160 176 L172 186 L212 186"
+        fill="none" stroke="#E8A33D" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M128 190 L128 214" stroke="#E8A33D" stroke-width="9" stroke-linecap="round"/>
+  <path d="M96 176 L84 158 M160 176 L172 158" stroke="#E8A33D" stroke-width="7"
+        stroke-linecap="round" opacity="0.85"/>
+
+  <!-- 水波 -->
+  <path d="M52 228 Q74 216 96 228 T140 228 T184 228 T228 228"
+        fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+</svg>

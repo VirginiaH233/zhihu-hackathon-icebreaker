@@ -1,0 +1,28 @@
+# 第三方工具包（官方 skill 不解压入库）
+skill_unzip/
+zhihu-cli-skill.zip
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# 系统
+.DS_Store
+Thumbs.db
+*.tmp
+.dbg.json
+.duel.json
+.card.txt
+
+data/
+
+# 部署产物
+.DS_Store
+*.bak
+*.bak-*
+设计预览-*.html
+
+# 本地开发：起服务时的滚动日志（不是项目资产，logs/*.md 的实测日志照旧保留）
+logs/dev-server.log

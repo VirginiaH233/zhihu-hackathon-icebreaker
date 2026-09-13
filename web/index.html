@@ -1,0 +1,1826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>社恐破冰船 · 超想认识你，那先跟你的分身 Agent 聊聊吧</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+/* ============================================================
+   设计系统 · 清晨海面
+   清透、有希望、不冷 —— 冰还是蓝的，但光已经来了
+   ============================================================ */
+:root {
+  --bg:        #F4F8FB;
+  --bg-deep:   #E9F1F8;
+  --card:      #FFFFFF;
+  --ink:       #1F2D3D;
+  --ink-soft:  #48596B;
+  --sub:       #6B8299;
+  --line:      #DCE7F0;
+  --line-soft: #EDF3F8;
+  --line-strong: #C6D8E6;   /* 表单描边：--line 太浅，输入框会隐形 */
+
+  --brand:      #3E7CB1;
+  --brand-ink:  #FFFFFF;
+  --brand-soft: #E7F0F8;
+  --brand-deep: #2C5F8D;
+
+  --accent:      #E8A33D;
+  --accent-ink:  #3A2A0C;
+  --accent-soft: #FDF3E3;
+  --accent-line: #F0D9B0;
+
+  --ok:      #4E9E7E;
+  --ok-soft: #E8F4EF;
+  --danger:  #C0574F;
+
+  --r-sm: 10px;
+  --r:    14px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+
+  --sh-1: 0 1px 2px rgba(31,45,61,.04), 0 2px 8px rgba(62,124,177,.06);
+  --sh-2: 0 2px 6px rgba(31,45,61,.05), 0 10px 28px rgba(62,124,177,.10);
+  --sh-3: 0 6px 16px rgba(31,45,61,.07), 0 22px 48px rgba(62,124,177,.15);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  background:
+    radial-gradient(900px 500px at 12% -8%, #FFFFFF 0%, rgba(255,255,255,0) 60%),
+    radial-gradient(700px 420px at 96% 4%, #EAF4FB 0%, rgba(234,244,251,0) 62%),
+    var(--bg);
+  color: var(--ink);
+  line-height: 1.68;
+  padding: 0 16px 72px;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.wrap { max-width: 760px; margin: 0 auto; }
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 22px 2px 18px;
+}
+.brand { display: flex; align-items: baseline; gap: 9px; }
+.brand-name { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
+.brand-name em { font-style: normal; color: var(--brand); }
+.brand-tag { font-size: 12px; color: var(--sub); display: none; }
+@media (min-width: 620px) { .brand-tag { display: inline; } }
+
+.me-entry {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 13px 6px 7px;
+  cursor: pointer; box-shadow: var(--sh-1);
+  transition: box-shadow .25s, transform .18s, border-color .25s;
+  font-size: 13px; color: var(--ink-soft);
+  white-space: nowrap; flex-shrink: 0;
+}
+.me-entry:hover { box-shadow: var(--sh-2); transform: translateY(-1px); border-color: var(--brand); }
+/* 还没建分身 → 虚线空位卡：一眼读出「这里有件事没做，点它」 */
+.me-entry.empty-st {
+  border: 1.5px dashed var(--brand); color: var(--brand); font-weight: 600;
+  padding: 6px 15px 6px 7px;
+}
+.me-entry.empty-st:hover { background: var(--brand-soft); }
+.me-entry.empty-st .me-avatar {
+  background: var(--brand-soft); color: var(--brand);
+  font-size: 16px; font-weight: 700; line-height: 1;
+}
+/* 首次访问的引导气泡（绝对定位，不占文档流） */
+.me-wrap { position: relative; }
+.me-bubble {
+  position: absolute; top: 100%; right: 0; margin-top: 10px; white-space: nowrap;
+  background: var(--ink); color: #fff; font-size: 12.5px;
+  padding: 8px 12px; border-radius: 10px; box-shadow: var(--sh-2);
+  display: none; z-index: 30; animation: meBob 1.8s ease-in-out infinite;
+}
+.me-bubble.show { display: inline-flex; align-items: center; gap: 6px; }
+.me-bubble:before {
+  content: ""; position: absolute; top: -6px; right: 20px;
+  border: 6px solid transparent; border-bottom-color: var(--ink); border-top: 0;
+}
+@keyframes meBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.me-avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand) 0%, #6BA3D0 100%);
+  color: #fff; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.me-avatar { overflow: hidden; }
+.me-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+/* 防御：头像绝不能被任何通用 class 的 padding 撑开（见 .list-empty 那条注释） */
+.me-avatar.empty { background: linear-gradient(135deg, #C3D4E1 0%, #DCE7F0 100%); color: var(--sub); padding: 0; }
+.me-entry .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 24px;
+  margin-bottom: 16px; box-shadow: var(--sh-1);
+  animation: rise .5s cubic-bezier(.22,.9,.3,1) both;
+}
+.card.hidden { display: none; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.step {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; letter-spacing: .9px; font-weight: 700;
+  color: var(--brand); background: var(--brand-soft);
+  padding: 4px 11px; border-radius: 999px; margin-bottom: 14px;
+}
+.step.warm { color: #A96C15; background: var(--accent-soft); }
+.step.green { color: #2F7A5E; background: var(--ok-soft); }
+
+/* ---------- 输入 ---------- */
+.row { display: flex; gap: 10px; }
+input[type=text], textarea {
+  width: 100%; padding: 13px 15px; font-size: 15px; font-family: inherit;
+  color: var(--ink); background: #FBFDFE;
+  border: 1.5px solid var(--line-strong); border-radius: var(--r);
+  transition: border-color .2s, background .2s, box-shadow .2s;
+}
+textarea { resize: vertical; min-height: 78px; line-height: 1.65; }
+input[type=text]:focus, textarea:focus {
+  outline: none; border-color: var(--brand); background: #fff;
+  box-shadow: 0 0 0 4px rgba(62,124,177,.10);
+}
+::placeholder { color: #A6B7C7; }
+
+button {
+  padding: 13px 22px; font-size: 15px; font-weight: 600; font-family: inherit;
+  background: var(--brand); color: var(--brand-ink);
+  border: none; border-radius: var(--r); cursor: pointer; white-space: nowrap;
+  transition: transform .12s, box-shadow .22s, opacity .2s, background .2s;
+  box-shadow: 0 2px 8px rgba(62,124,177,.25);
+}
+button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(62,124,177,.30); }
+button:active:not(:disabled) { transform: translateY(0); }
+button:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+button.ghost {
+  background: var(--card); color: var(--brand); border: 1.5px solid var(--line); box-shadow: none;
+}
+button.ghost:hover:not(:disabled) { border-color: var(--brand); background: var(--brand-soft); }
+button.accent {
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 2px 8px rgba(232,163,61,.30);
+}
+button.accent:hover:not(:disabled) { box-shadow: 0 5px 16px rgba(232,163,61,.36); }
+button.wide { width: 100%; }
+
+.hint { font-size: 12.5px; color: var(--sub); margin-top: 10px; }
+.hint.warn { color: #A96C15; }
+
+/* ---------- 钩子 ---------- */
+.hook {
+  font-size: 24px; font-weight: 700; line-height: 1.5;
+  letter-spacing: .2px; margin-bottom: 20px;
+}
+.hook em { font-style: normal; color: var(--brand); position: relative; }
+.hook em::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 2px; height: 7px;
+  background: var(--accent-soft); border-radius: 4px; z-index: -1;
+}
+.hook-sub { font-size: 13.5px; color: var(--sub); margin-top: 16px; line-height: 1.75; }
+
+/* ---------- 三步说明 ---------- */
+.howto { margin-bottom: 18px; }
+.hi {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13.5px; color: var(--ink-soft); padding: 5px 0;
+}
+.hi .n {
+  width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
+  background: var(--brand-soft); color: var(--brand);
+  font-size: 11.5px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ---------- 试试看 ---------- */
+.try { font-size: 12.5px; color: var(--sub); margin-top: 12px; }
+.try span {
+  display: inline-block; margin: 0 3px; padding: 3px 11px;
+  color: var(--brand); background: var(--brand-soft);
+  border: 1px solid var(--line); border-radius: 999px;
+  cursor: pointer; font-weight: 600;
+  transition: background .18s, border-color .18s, transform .14s;
+}
+.try span:hover { background: #DCEAF5; border-color: var(--brand); transform: translateY(-1px); }
+
+/* ---------- 候选列表 ---------- */
+.cands { margin-top: 16px; }
+.cand {
+  display: flex; align-items: center; gap: 13px;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r);
+  margin-bottom: 9px; cursor: pointer; background: #FDFEFF;
+  transition: border-color .2s, background .2s, transform .16s, box-shadow .2s;
+}
+.cand:hover {
+  border-color: var(--brand); background: var(--card);
+  transform: translateX(3px); box-shadow: var(--sh-1);
+}
+.cand img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; background: var(--bg-deep); flex-shrink: 0; }
+.cand .m { flex: 1; min-width: 0; }
+.cand .n { font-size: 14.5px; font-weight: 600; display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.cand .sig { font-size: 11px; color: var(--sub); font-weight: 400; }
+/* 候选卡片已去掉「✓ 就是 TA」标记：给人的观感是「系统替我断言了」，
+   万一对不上反而更糟。改成标题里一句「确认一下是不是 TA」就够。 */
+.pop a { color: var(--brand); text-decoration: underline; }
+.cand .s { font-size: 12px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.cand .stats { font-size: 11px; color: var(--sub); margin-top: 3px; opacity: .9; }
+.cand .go { color: var(--brand); font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.cand-more { margin: 12px 0 4px; padding: 11px 14px; font-size: 13px; color: var(--sub);
+  background: var(--bg-deep); border: 1px dashed var(--line); border-radius: var(--r-sm);
+  cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  transition: color .2s, border-color .2s; }
+.cand-more:hover { color: var(--brand); border-color: var(--brand); }
+
+/* ---------- 档案生成进度 ---------- */
+#stage-loading { display: none; }
+.loadline {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 14px; color: var(--sub); padding: 8px 0;
+  opacity: 0; animation: fadeUp .55s forwards;
+}
+.loadline .d { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); flex-shrink: 0; animation: pulse 1.3s infinite; }
+.loadline.done .d {
+  background: transparent; color: var(--ok); animation: none; font-weight: 700;
+  width: 11px; height: 11px; font-size: 11px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.loadline.done { color: var(--ink-soft); }
+@keyframes fadeUp { to { opacity: 1; } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .28; } }
+
+/* ---------- 灵魂档案（结构化渲染） ---------- */
+.soulhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.soulname { font-size: 18px; font-weight: 700; }
+.badge {
+  font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  color: #A96C15; background: var(--accent-soft); border: 1px solid var(--accent-line);
+}
+.badge.ok { color: #2F7A5E; background: var(--ok-soft); border-color: #C8E6DA; }
+
+.soul {
+  background: linear-gradient(180deg, #FBFDFE 0%, #F7FBFD 100%);
+  border: 1px solid var(--line-soft); border-radius: var(--r);
+  padding: 18px 20px; max-height: 340px; overflow: hidden; position: relative;
+  transition: max-height .45s cubic-bezier(.22,.9,.3,1);
+}
+.soul.open { max-height: 3000px; }
+.soul::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 56px;
+  background: linear-gradient(180deg, rgba(247,251,253,0), #F7FBFD 82%);
+  pointer-events: none; opacity: 1; transition: opacity .35s;
+}
+.soul.open::after { opacity: 0; }
+
+.soul h4 {
+  font-size: 12px; font-weight: 700; letter-spacing: .8px; color: var(--brand);
+  margin: 18px 0 9px; display: flex; align-items: center; gap: 7px;
+}
+.soul h4:first-child { margin-top: 0; }
+.soul h4::before {
+  content: ''; width: 3px; height: 13px; border-radius: 2px;
+  background: var(--brand); flex-shrink: 0;
+}
+.soul h4.warm { color: #A96C15; }
+.soul h4.warm::before { background: var(--accent); }
+.soul ul { list-style: none; }
+.soul li {
+  font-size: 13.5px; color: var(--ink-soft); padding: 6px 0 6px 16px;
+  position: relative; line-height: 1.72;
+}
+.soul li::before {
+  content: ''; position: absolute; left: 3px; top: 15px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--line);
+}
+.soul p { font-size: 13.5px; color: var(--ink-soft); padding: 5px 0; line-height: 1.75; }
+.soul strong, .soul b { color: var(--ink); font-weight: 600; }
+.soul .quote {
+  font-size: 13px; color: var(--sub); background: #fff; border-left: 2.5px solid var(--brand);
+  border-radius: 0 8px 8px 0; padding: 8px 12px; margin: 7px 0;
+}
+
+/* 抽屉里「查看我的档案」——比 TA 的灵魂档案更紧凑：字更小、行距更松、小标题分色 */
+.soul-rendered {
+  font-size: 13px; line-height: 1.85; color: var(--ink-soft);
+  background: linear-gradient(180deg, #FBFDFE 0%, #F7FBFD 100%);
+  border: 1px solid var(--line-soft); border-radius: var(--r);
+  padding: 16px 18px;
+}
+.soul-rendered h4 {
+  font-size: 13.5px; font-weight: 700; color: var(--brand);
+  margin: 17px 0 8px; display: flex; align-items: center; gap: 7px; letter-spacing: .2px;
+}
+.soul-rendered h4:first-child { margin-top: 0; }
+.soul-rendered h4::before {
+  content: ''; width: 3px; height: 12px; border-radius: 2px;
+  background: var(--brand); flex-shrink: 0;
+}
+/* 小标题按顺序轮换配色，读起来有层次 */
+.soul-rendered h4:nth-of-type(3n+2) { color: #A96C15; }
+.soul-rendered h4:nth-of-type(3n+2)::before { background: var(--accent); }
+.soul-rendered h4:nth-of-type(3n) { color: #2F7A5E; }
+.soul-rendered h4:nth-of-type(3n)::before { background: var(--ok); }
+.soul-rendered p { margin: 7px 0; line-height: 1.85; }
+.soul-rendered ul { list-style: none; margin: 4px 0; }
+.soul-rendered li {
+  font-size: 12.5px; color: var(--ink-soft); padding: 5px 0 5px 15px;
+  position: relative; line-height: 1.8;
+}
+.soul-rendered li::before {
+  content: ''; position: absolute; left: 3px; top: 13px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--line);
+}
+.soul-rendered strong, .soul-rendered b { color: var(--ink); font-weight: 600; }
+.soul-rendered .quote {
+  font-size: 12.5px; color: var(--sub); background: #fff; border-left: 2.5px solid var(--brand);
+  border-radius: 0 8px 8px 0; padding: 7px 11px; margin: 7px 0;
+}
+.soul-more {
+  font-size: 12.5px; color: var(--brand); cursor: pointer; margin-top: 12px;
+  font-weight: 600; user-select: none;
+}
+.soul-more:hover { color: var(--brand-deep); }
+
+/* ---------- 我的分身 ---------- */
+.mestatus {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13.5px; color: #2F7A5E; background: var(--ok-soft);
+  border: 1px solid #C8E6DA; border-radius: var(--r);
+  padding: 12px 14px; margin-bottom: 16px;
+}
+.mestatus .ico { font-size: 15px; }
+
+/* ---------- 「还没有你的分身」醒目提示 ---------- */
+.needcard {
+  background: linear-gradient(155deg, #FFFCF5 0%, #FFF6E8 100%);
+  border: 1.5px solid var(--accent-line);
+  border-radius: var(--r-lg);
+  padding: 22px; margin-bottom: 4px;
+  box-shadow: 0 2px 10px rgba(232,163,61,.13);
+  animation: rise .5s cubic-bezier(.22,.9,.3,1) both;
+}
+.need-h {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 16.5px; font-weight: 700; color: #5C4419;
+  margin-bottom: 10px;
+}
+.need-ico {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  display: flex; align-items: center; justify-content: center; font-size: 15px;
+}
+.need-b {
+  font-size: 13.5px; color: #7A6134; line-height: 1.8; margin-bottom: 16px;
+}
+.need-b b { color: #5C4419; }
+.skip {
+  text-align: center; font-size: 12.5px; color: #A98B52;
+  margin-top: 12px; cursor: pointer; user-select: none;
+  transition: color .18s;
+}
+.skip:hover { color: #B8863A; text-decoration: underline; }
+
+/* ---------- 跳过后 ---------- */
+.skipped-note {
+  font-size: 13px; color: #7A6134; background: #FDF8EF;
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: 12px 14px; margin-bottom: 18px; line-height: 1.75;
+}
+.skipped-note b { color: #5C4419; }
+
+/* ---------- 对话 ---------- */
+.duelhead {
+  font-size: 12.5px; color: var(--sub); background: var(--brand-soft);
+  border-radius: var(--r); padding: 11px 14px; margin-bottom: 20px; line-height: 1.7;
+}
+.msg { margin-bottom: 18px; display: flex; flex-direction: column; animation: rise .45s cubic-bezier(.22,.9,.3,1) both; }
+.msg .who {
+  font-size: 11.5px; color: var(--sub); margin-bottom: 6px;
+  display: flex; align-items: center; gap: 6px;
+}
+.msg .who .av {
+  width: 18px; height: 18px; border-radius: 50%; font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0;
+}
+.msg.ta .who .av { background: linear-gradient(135deg, #6B8299, #93A9BC); }
+.msg.me .who .av { background: linear-gradient(135deg, var(--brand), #6BA3D0); }
+.bub {
+  padding: 13px 16px; border-radius: var(--r); font-size: 14.5px;
+  max-width: 86%; white-space: pre-wrap; word-break: break-word; line-height: 1.72;
+}
+.msg.ta { align-items: flex-start; }
+.msg.ta .bub {
+  background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 5px;
+  box-shadow: var(--sh-1);
+}
+.msg.me { align-items: flex-end; }
+.msg.me .bub {
+  background: var(--brand); color: #fff; border-bottom-right-radius: 5px;
+  box-shadow: 0 2px 10px rgba(62,124,177,.24);
+}
+.msg.sys { align-items: center; }
+.msg.sys .bub {
+  background: transparent; color: var(--sub); font-size: 12.5px; padding: 5px 0;
+  max-width: 100%; text-align: center; box-shadow: none;
+}
+
+.basis { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 9px; max-width: 86%; }
+.basis .lb { font-size: 11px; color: var(--sub); }
+.chip {
+  font-size: 11.5px; color: var(--brand); background: var(--brand-soft);
+  border: 1px solid var(--line); padding: 3px 9px; border-radius: 7px; cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+.chip:hover { background: #DCEAF5; border-color: var(--brand); }
+.chip.none { color: var(--sub); background: #F2F6F9; cursor: default; }
+.chip.none:hover { background: #F2F6F9; border-color: var(--line); }
+.pop {
+  display: none; margin-top: 9px; font-size: 12.5px; color: var(--ink-soft);
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 12px 14px; white-space: pre-wrap; max-width: 100%; box-shadow: var(--sh-1);
+}
+.pop.show { display: block; animation: rise .3s both; }
+
+.thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--sub); padding: 8px 0; }
+.thinking .d { width: 5px; height: 5px; border-radius: 50%; background: var(--brand); animation: pulse 1.4s infinite; }
+.thinking .d:nth-child(2) { animation-delay: .18s; }
+.thinking .d:nth-child(3) { animation-delay: .36s; }
+
+/* ---------- 破冰卡（实体卡片感） ---------- */
+.icewrap { display: flex; justify-content: center; }
+.ice {
+  width: 100%; max-width: 560px;
+  background:
+    radial-gradient(420px 200px at 8% 0%, #FFFDF9 0%, rgba(255,253,249,0) 70%),
+    linear-gradient(165deg, #FFFDF8 0%, #FFF8EC 100%);
+  border: 1.5px solid var(--accent-line);
+  border-radius: var(--r-xl);
+  padding: 0; box-shadow: var(--sh-3);
+  overflow: hidden; position: relative;
+}
+.ice::before {
+  content: ''; position: absolute; inset: 9px; border-radius: 20px;
+  border: 1px dashed rgba(232,163,61,.42); pointer-events: none;
+}
+.ice-top {
+  padding: 24px 26px 18px; border-bottom: 1px dashed rgba(232,163,61,.38);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.ice-brand { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; color: #B8863A; }
+.ice-title { font-size: 19px; font-weight: 700; margin-top: 5px; color: #4A3A1E; }
+.ice-to { font-size: 12.5px; color: #9B7B45; }
+.ice-body { padding: 20px 26px 24px; }
+.ice-sec { margin-bottom: 20px; position: relative; }
+.ice-sec:last-child { margin-bottom: 0; }
+.ice-sec .t {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #B8863A;
+  margin-bottom: 9px; display: flex; align-items: center; gap: 7px;
+}
+.ice-sec .t::before { content: '◆'; font-size: 7px; color: var(--accent); }
+.ice-sec .c { font-size: 14.5px; color: #4A3A1E; line-height: 1.78; white-space: pre-wrap; }
+.ice-hl {
+  font-size: 16px; font-weight: 600; color: #4A3A1E; line-height: 1.66;
+  background: rgba(255,255,255,.66); border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0; padding: 12px 15px;
+}
+.opener {
+  display: flex; align-items: center; gap: 11px;
+  background: rgba(255,255,255,.82); border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm); padding: 12px 14px; margin-bottom: 9px;
+  transition: transform .16s, box-shadow .2s;
+}
+.opener:hover { transform: translateX(2px); box-shadow: var(--sh-1); }
+.opener .num {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft);
+  color: #B8863A; font-size: 11px; font-weight: 700; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.opener .txt { flex: 1; font-size: 14.5px; color: #4A3A1E; line-height: 1.62; }
+.opener .cp {
+  font-size: 11.5px; font-weight: 600; color: #B8863A; background: #fff;
+  border: 1px solid var(--accent-line); padding: 5px 11px; border-radius: 8px;
+  cursor: pointer; flex-shrink: 0; transition: background .18s, transform .12s;
+}
+.opener .cp:hover { background: var(--accent-soft); }
+.opener .cp:active { transform: scale(.96); }
+.opener .cp.done { background: var(--ok-soft); border-color: #C8E6DA; color: #2F7A5E; }
+.ice-foot {
+  font-size: 12px; color: #9B7B45; line-height: 1.7;
+  padding: 15px 26px 20px; border-top: 1px dashed rgba(232,163,61,.38);
+  background: rgba(255,255,255,.4);
+}
+
+/* ---------- 个人中心抽屉 ---------- */
+.overlay {
+  position: fixed; inset: 0; background: rgba(31,45,61,.34);
+  backdrop-filter: blur(3px); opacity: 0; pointer-events: none;
+  transition: opacity .3s; z-index: 40;
+}
+.overlay.show { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(430px, 92vw);
+  background: var(--card); box-shadow: -8px 0 40px rgba(31,45,61,.18);
+  transform: translateX(102%); transition: transform .36s cubic-bezier(.22,.9,.3,1);
+  z-index: 50; display: flex; flex-direction: column;
+}
+.drawer.show { transform: none; }
+.drawer-top {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 22px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0;
+}
+.drawer-top h3 { font-size: 16px; font-weight: 700; }
+.x {
+  width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--card); color: var(--sub); font-size: 15px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+  transition: background .2s, color .2s; box-shadow: none;
+}
+.x:hover { background: var(--bg); color: var(--ink); transform: none; box-shadow: none; }
+.drawer-body { padding: 22px; overflow-y: auto; flex: 1; }
+
+.me-card {
+  background: linear-gradient(150deg, #F7FBFD 0%, #EFF6FB 100%);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 20px; margin-bottom: 18px;
+}
+.me-card .n { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 9px; }
+.me-card .src { font-size: 12.5px; color: var(--sub); margin-top: 5px; line-height: 1.7; }
+
+.field { margin-bottom: 18px; }
+.field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 7px; }
+.field label span { font-weight: 400; color: var(--sub); font-size: 12.5px; }
+.keybox {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--bg); border: 1px dashed var(--line); border-radius: var(--r-sm);
+  padding: 10px 13px;
+}
+.keybox code {
+  flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px; color: var(--brand); letter-spacing: .5px; word-break: break-all;
+}
+.mini {
+  font-size: 12px; font-weight: 600; color: var(--brand); background: var(--card);
+  border: 1px solid var(--line); padding: 5px 11px; border-radius: 8px;
+  cursor: pointer; white-space: nowrap; transition: border-color .18s, background .18s;
+}
+.mini:hover { border-color: var(--brand); background: var(--brand-soft); }
+
+.oauth-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--bg); border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm); padding: 13px 15px;
+}
+.oauth-row .t { font-size: 13.5px; font-weight: 600; }
+.oauth-row .d { font-size: 12px; color: var(--sub); margin-top: 2px; line-height: 1.6; }
+
+/* ---------- 杂项 ---------- */
+.err {
+  color: var(--danger); background: #FDF3F2; border: 1px solid #F2D6D3;
+  border-radius: var(--r-sm); padding: 13px 15px; font-size: 13.5px; line-height: 1.7;
+}
+/* ⚠️ 这里的 class 不能叫 .empty —— 顶栏头像用的是 `.me-avatar.empty`，
+   会被这条「列表空态」的 padding 泄漏成 26×68，把整个胶囊撑成 123×82（又大又圆）。
+   踩过一次，所以叫 .list-empty。 */
+.list-empty { text-align: center; color: var(--sub); font-size: 13.5px; padding: 34px 0; }
+.list-empty .big { font-size: 34px; display: block; margin-bottom: 12px; opacity: .5; }
+.foot { text-align: center; font-size: 12px; color: var(--sub); margin-top: 28px; line-height: 1.9; }
+.foot .q { opacity: .8; }
+.center { text-align: center; }
+.toast {
+  position: fixed; left: 50%; bottom: 40px; transform: translate(-50%, 20px);
+  background: var(--ink); color: #fff; font-size: 13.5px;
+  padding: 11px 20px; border-radius: 999px; opacity: 0; pointer-events: none;
+  transition: opacity .28s, transform .28s; z-index: 100; box-shadow: var(--sh-2);
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ========== 顶栏 ========== -->
+  <div class="topbar">
+    <div class="brand">
+      <span class="brand-name">社恐<em>破冰船</em></span>
+      <span class="brand-tag">超想认识你，那先跟你的分身聊聊</span>
+    </div>
+    <div class="me-wrap">
+      <div class="me-entry" id="me-entry" onclick="openDrawer()">
+        <span class="me-avatar empty" id="top-av">我</span>
+        <span id="top-name">我的分身</span>
+        <span class="dot" id="top-dot" style="display:none"></span>
+      </div>
+      <div class="me-bubble" id="me-bubble">先建你的分身，以后认识谁都用它</div>
+    </div>
+  </div>
+
+  <!-- ========== 幕 1：找人 ========== -->
+  <div class="card" id="stage-hook">
+    <div class="hook">想知道 <em>TA 会怎么看你</em> 吗？</div>
+
+    <div class="howto">
+      <div class="hi"><span class="n">1</span><span>输入一个你想认识的知乎答主</span></div>
+      <div class="hi"><span class="n">2</span><span>我们读 TA 的公开创作，生成 TA 的数字分身</span></div>
+      <div class="hi"><span class="n">3</span><span>让你的分身替你先聊一场 → 拿到一张破冰卡</span></div>
+    </div>
+
+    <div class="row">
+      <input type="text" id="nick" placeholder="输入 TA 的昵称，或粘贴主页链接 / 主页后缀（如 wenbo）"
+             onkeydown="if(event.key==='Enter')searchCand()">
+      <button id="btn-search" onclick="searchCand()">搜索</button>
+    </div>
+    <div class="hint" style="margin-top:9px">
+      搜不到人？<a href="#" onclick="openZhihuPeopleSearch();return false">去知乎搜 TA 的用户名 ↗</a>
+      ——把 TA 的主页链接（<code style="font-size:11.5px">zhihu.com/people/xxx</code>）粘回上面最准。
+    </div>
+
+    <div class="try">
+      不知道试谁？点一个：
+      <span onclick="tryWho('梁边妖')">梁边妖</span>
+      <span onclick="tryWho('曾加')">曾加</span>
+      <span onclick="tryWho('陈章鱼')">陈章鱼</span>
+    </div>
+
+    <div class="cands" id="cand-list"></div>
+
+    <div class="hook-sub">
+      你不是在跟 AI 聊天——是 <b>你的分身</b> 先替你去见了 TA。<br>
+      聊完你会知道：你们聊不聊得来、第一句该说什么。
+    </div>
+  </div>
+
+  <!-- ========== 幕 2：生成 TA 的档案 ========== -->
+  <div class="card" id="stage-loading">
+    <span class="step">正在读 TA 的分身</span>
+    <div id="loading-lines"></div>
+  </div>
+
+  <!-- ========== 幕 3：TA 的分身 + 我的分身 ========== -->
+  <div class="card hidden" id="stage-ta">
+    <span class="step">TA 的分身已就位</span>
+    <div class="soulhead">
+      <span class="soulname" id="agent-name"></span>
+      <span class="badge">数字分身 · 非本人</span>
+    </div>
+    <div class="soul" id="soul-box">
+      <div id="soul-rendered"></div>
+    </div>
+    <div class="soul-more" id="soul-more" onclick="toggleSoul()">展开完整档案 ▾</div>
+
+    <div style="height:1px; background:var(--line-soft); margin:24px 0"></div>
+
+    <span class="step warm">现在，轮到你了</span>
+
+    <!-- ① 还没有分身：醒目提示 + 授权生成 / 跳过 -->
+    <div id="me-need" class="needcard" style="display:none">
+      <div class="need-h">
+        <span class="need-ico">👤</span>
+        <span>还没有你的分身</span>
+      </div>
+      <div class="need-b">
+        要让两个分身聊起来，得先有「你」。<br>
+        你的分身来自<b>你自己在知乎写过的内容</b>——所以得先让知乎账号登录并授权。
+        我们<b>只读公开创作</b>，不碰私信、关注列表或任何非公开数据。
+      </div>
+      <button class="accent wide" id="btn-build-inline" onclick="buildMeInline()">用知乎账号登录并生成</button>
+      <div class="skip" onclick="skipMe()">暂时跳过，先看 TA 的分身 →</div>
+    </div>
+
+    <!-- ①.5 正在生成：登录后自动进入，占住那 10 秒别让它空着 -->
+    <div id="me-building" class="needcard" style="display:none">
+      <div class="need-h">
+        <span class="need-ico">✓</span>
+        <span>已登录，正在为你生成数字分身</span>
+      </div>
+      <div class="need-b" style="margin-bottom:14px">
+        公开内容越多，读得越久，请稍等。
+      </div>
+      <div id="build-steps"></div>
+    </div>
+
+    <!-- ② 已有分身：状态 + 进行下一步 -->
+    <div id="me-ready" style="display:none">
+      <div class="mestatus" id="me-status"></div>
+      <div class="field">
+        <label>补充说明 <span>可选。想让分身更准，可以补几句</span></label>
+        <textarea id="intro" placeholder="你是谁 / 最近在想什么 / 想认识怎样的人"></textarea>
+      </div>
+      <div class="field">
+        <label>你的昵称 <span>可选，分身之间互相称呼用</span></label>
+        <input type="text" id="myname" placeholder="例：小盐">
+      </div>
+      <div class="row" style="margin-top:4px">
+        <button id="btn-duel" onclick="startDuel()" style="flex:1">让两个分身见一面</button>
+        <button id="btn-edit" class="ghost" onclick="openDrawer()">查看我的分身</button>
+      </div>
+    </div>
+
+    <!-- ③ 跳过后：轻提示 + 直接进对话 -->
+    <div id="me-skipped" style="display:none">
+      <div class="skipped-note">
+        这次对话会用一句简单介绍代替你的分身，效果会浅一些。<br>
+        想效果更好，随时点右上角 <b>「我的分身」</b> 补上（10 秒）。
+      </div>
+      <div class="field">
+        <label>用一句话介绍你自己 <span>可选，跳过时用它代班</span></label>
+        <textarea id="intro-skip" placeholder="例：我是个产品经理，最近在研究 AI 怎么理解人"></textarea>
+      </div>
+      <div class="row" style="margin-top:4px">
+        <button id="btn-duel-skip" onclick="startDuel(true)" style="flex:1">就这样，先聊一场</button>
+        <button class="ghost" onclick="backToBuild()">还是生成吧</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 幕 4：两个分身相遇 ========== -->
+  <div class="card hidden" id="stage-duel">
+    <span class="step green">两个分身正在聊</span>
+    <div class="duelhead">
+      两个分身各自只知道自己的底细——它们只通过这几句话认识彼此。<br>
+      每条发言都带<b>依据</b>标签，点开可以看到 TA 的原话。
+    </div>
+    <div id="duel-log"></div>
+    <div id="duel-actions" class="center" style="margin-top:24px; display:none">
+      <button class="accent" id="btn-ice" onclick="makeCard()">这场对话告诉了我什么？</button>
+    </div>
+  </div>
+
+  <!-- ========== 幕 5：破冰卡 ========== -->
+  <div class="card hidden" id="stage-card">
+    <span class="step warm">你的破冰卡</span>
+    <div class="icewrap"><div class="ice" id="ice-card"></div></div>
+    <div class="center" style="margin-top:20px">
+      <button class="accent" onclick="exportCard()">保存成图片</button>
+      <button class="ghost" onclick="againOne()" style="margin-left:10px">再认识一个人</button>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>社恐破冰船 · 盐之有理</div>
+    <div class="q" id="quota" style="display:none"></div>
+    <div class="q" style="margin-top:6px">分身基于公开内容构建，不代表本人想法 · 我们做连接，不做评价</div>
+  </div>
+</div>
+
+<!-- ========== 个人中心抽屉 ========== -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-top">
+    <h3>我的分身</h3>
+    <button class="x" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body">
+
+    <!-- 分身状态卡 -->
+    <div class="me-card">
+      <div class="n"><span id="d-name">还没建</span><span class="badge ok" id="d-src" style="display:none"></span></div>
+      <div class="src" id="d-desc">建一次你的分身，以后认识谁都用它——不用重复建，随时可以改。</div>
+    </div>
+
+    <!-- 编辑档案 -->
+    <div id="d-edit-wrap" style="display:none">
+      <!-- 查看态（默认）：用 renderSoul 同款渲染 -->
+      <div id="d-view-wrap">
+        <div class="soul-rendered" id="d-persona-rendered"></div>
+        <div class="row" style="margin-top:14px">
+          <button class="ghost" onclick="togglePersonaEdit(true)">✏️ 编辑档案</button>
+        </div>
+      </div>
+      <!-- 编辑态 -->
+      <div id="d-edit-inner" style="display:none">
+      <div class="field">
+        <label>分身档案 <span>AI 给你画的像，你有权利改它</span></label>
+        <textarea id="d-persona" style="min-height:200px; font-size:13px"></textarea>
+      </div>
+      <div class="row" style="margin-bottom:20px">
+        <button class="wide" onclick="savePersona()">保存修改</button>
+        <button class="ghost" onclick="togglePersonaEdit(false)" style="margin-left:8px">取消</button>
+      </div>
+      </div>
+    </div>
+
+    <!-- 补充说明 + 昵称（没生成过时显示） -->
+    <div id="d-create-wrap">
+      <div class="skipped-note" style="margin-bottom:16px">
+        你的分身来自 <b>你自己在知乎写过的内容</b>——所以得先让知乎账号登录并授权。
+        我们只读公开创作，不碰私信、关注列表或任何非公开数据。
+      </div>
+      <div class="field">
+        <label>补充说明 <span>可选</span></label>
+        <textarea id="d-intro" placeholder="你是谁 / 最近在想什么 / 想认识怎样的人"></textarea>
+      </div>
+      <div class="field">
+        <label>你的昵称 <span>分身之间互相称呼用</span></label>
+        <input type="text" id="d-myname" placeholder="例：小盐">
+      </div>
+      <div class="row" style="margin-bottom:20px">
+        <button class="wide accent" id="d-build" onclick="buildMe()">用知乎账号登录并生成</button>
+      </div>
+      <!-- 登录后自动生成：占住等待，逐条点亮 -->
+      <div id="d-building" style="display:none; margin-bottom:20px">
+        <div class="mestatus" style="display:flex">
+          <span class="ico">✓</span>
+          <span>已登录，正在为你生成数字分身</span>
+        </div>
+        <div id="d-build-steps" style="margin-top:12px"></div>
+        <div class="hint" style="margin-top:8px">公开内容越多，读得越久，请稍等。</div>
+      </div>
+    </div>
+
+    <!-- 分身钥匙 -->
+    <div class="field">
+      <label>我的钥匙 <span>这就是你的身份。换设备、换浏览器时用它找回</span></label>
+      <div class="keybox">
+        <code id="d-key"></code>
+        <span class="mini" onclick="copyKey()">复制</span>
+      </div>
+    </div>
+
+    <!-- 用钥匙进入（锁孔） -->
+    <div class="field">
+      <label>用钥匙进入 <span>在别的设备上生成过分身？把钥匙粘在这里</span></label>
+      <div class="row">
+        <input type="text" id="d-key-in" placeholder="粘贴你的分身钥匙…"
+               onkeydown="if(event.key==='Enter')useKey()">
+        <button class="ghost" onclick="useKey()">进入</button>
+      </div>
+      <div class="hint" id="key-hint">钥匙长这样：<code style="font-size:11.5px">u + 一串字符</code>。谁拿到它谁就是你——所以别发到群里。</div>
+    </div>
+
+    <!-- OAuth -->
+    <div class="field">
+      <label>知乎账号登录</label>
+      <div class="oauth-row">
+        <div>
+          <div class="t" id="o-title">未登录</div>
+          <div class="d" id="o-desc">授权后，你的分身来自你自己的知乎内容</div>
+        </div>
+        <button class="ghost" id="o-btn" onclick="zhihuLogin()" style="display:none">登录</button>
+      </div>
+    </div>
+
+    <div class="hint" style="margin-top:22px; padding-top:16px; border-top:1px solid var(--line-soft); line-height:1.8">
+      你的分身基于公开内容构建。<br>
+      TA 的分身也一样——它只读得到公开创作，不代表完整人格。<br>
+      真正的答案，只有你开口之后才知道。
+    </div>
+  </div>
+</aside>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let sid = null, taName = '', myName = '我', introText = '', dialogue = [];
+const STORE = {};
+/* 顶栏身份的两个数据源。以前 loadMe 和 checkOauth 各自直接写顶栏，
+   谁后返回谁赢 —— 于是登录后又被 loadMe 打回默认的「我」。
+   现在两边只更新这两个变量，渲染统一走 renderTop()。 */
+let ZHIHU = null;   // /api/oauth/me 的结果
+let ME = null;      // /api/me 的结果
+
+const uid = (() => {
+  let u = localStorage.getItem('salt_uid');
+  if (!u) { u = 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem('salt_uid', u); }
+  return u;
+})();
+
+function esc(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function toast(msg, ms = 2200) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), ms);
+}
+const jpost = (url, data) => fetch(url, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+}).then(r => r.json());
+
+/* ============================================================
+   幕 1：两步找人
+   ============================================================ */
+/** 服务端搜不了「用户」——知乎没有对外的搜人接口（网页版的用户搜索要登录态+反爬）。
+ *  所以把这步交回知乎自己的搜索页：用户在浏览器里搜到 TA，把主页链接粘回来。 */
+function openZhihuPeopleSearch() {
+  const q = ($('nick').value || '').trim();
+  if (!q) { toast('先输入 TA 的用户名'); $('nick').focus(); return; }
+  window.open('https://www.zhihu.com/search?type=people&q=' + encodeURIComponent(q),
+              '_blank', 'noopener');
+}
+
+/** 快捷试一个（自动填好并搜索） */
+function tryWho(name) {
+  $('nick').value = name;
+  searchCand();
+}
+
+async function searchCand() {
+  const nick = $('nick').value.trim();
+  if (!nick) { toast('先输入一个知乎昵称'); return; }
+  $('btn-search').disabled = true;
+  $('cand-list').innerHTML = '<div class="hint">搜索中…</div>';
+  try {
+    const d = await jpost('/api/candidates', { name: nick });
+    if (!d.ok) { $('cand-list').innerHTML = '<div class="err">' + esc(d.error) + '</div>'; return; }
+    renderCands(d.candidates, nick);
+  } catch (e) {
+    $('cand-list').innerHTML = '<div class="err">出错：' + esc(e.message) + '</div>';
+  } finally { $('btn-search').disabled = false; }
+}
+
+/** 候选人卡片（复用：主列表和折叠区都用它画） */
+function makeCand(c) {
+  const d = document.createElement('div');
+  d.className = 'cand';
+  d.innerHTML =
+    `<img src="${esc(c.avatar || '')}" onerror="this.style.visibility='hidden'">` +
+    `<div class="m"><div class="n">${esc(c.name)}` +
+      `<span class="sig">${esc(c.signature || '')}</span></div>` +
+    `<div class="s">${esc(c.sample || '')}</div>` +
+    (c.stats ? `<div class="stats">${c.stats.answer} 篇回答 · ${c.stats.article} 篇文章 · ${c.stats.follower} 关注者</div>` : ``) +
+    `</div><span class="go">生成 TA →</span>`;
+  d.onclick = () => loadByCand(c.name, c.signature);
+  return d;
+}
+
+/**
+ * 候选列表：**名字对得上的**才是用户要找的人，直接列出来；
+ * 其余只是「内容里提到过 TA」的作者（常常混进机构号），折叠起来不干扰。
+ * 若一个名字都对不上，则退回全部列出 —— 否则用户会觉得搜不到人。
+ */
+function renderCands(cands, query) {
+  const el = $('cand-list');
+  const q = (query || '').trim();
+  // 按主页 token 读出来的那个人是精确命中的（他的名字未必包含你输入的 token，比如 wenbo → 路过的鞋）
+  const hits = cands.filter(c => c.by_token || (q && (c.name.trim() === q || c.name.includes(q))));
+  const rest = cands.filter(c => !hits.includes(c));
+
+  el.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'hint';
+  head.style.marginBottom = '10px';
+  if (!hits.length) {
+    head.textContent = '没有名字对得上的人，下面这几位的知乎内容里提到过 TA：';
+  } else if (hits.length === 1 && hits[0].exact) {
+    head.textContent = '找到了，确认一下是不是 TA：';
+  } else {
+    head.textContent = '这几位名字对得上，点一下你要的那个：';
+  }
+  el.appendChild(head);
+
+  (hits.length ? hits : rest).forEach(c => el.appendChild(makeCand(c)));
+  if (!hits.length || !rest.length) return;
+
+  const more = document.createElement('div');
+  more.className = 'cand-more';
+  more.innerHTML = `<span>还搜到 ${rest.length} 位「提到过 TA」的人</span><span>展开 ▾</span>`;
+  const box = document.createElement('div');
+  box.style.display = 'none';
+  rest.forEach(c => box.appendChild(makeCand(c)));
+  more.onclick = () => {
+    const open = box.style.display !== 'none';
+    box.style.display = open ? 'none' : 'block';
+    more.lastElementChild.textContent = open ? '展开 ▾' : '收起 ▴';
+  };
+  el.appendChild(more);
+  el.appendChild(box);
+}
+
+/* ============================================================
+   幕 2：取料 + 生成灵魂档案
+   ============================================================ */
+async function loadByCand(name, signature) {
+  $('cand-list').innerHTML = '';
+  $('stage-loading').style.display = 'block';
+  ['stage-ta', 'stage-duel', 'stage-card'].forEach(i => $(i).classList.add('hidden'));
+  $('duel-log').innerHTML = ''; dialogue = [];
+  const box = $('loading-lines'); box.innerHTML = '';
+  // 错峰靠 addLine 的动画延迟，不要用 setTimeout：
+  // setTimeout 是异步的，回调会插到「读到 N 条」之后，DOM 顺序就乱了
+  [`正在读「${name}」的公开创作…`, '正在整理 TA 的档案…'].forEach((t, i) => addLine(box, t, i * 620));
+  try {
+    const d = await jpost('/api/load', { name, signature });
+    if (!d.ok) { showErr(d.error); return; }
+    sid = d.session_id; taName = d.name;
+    $('agent-name').textContent = d.name;
+    renderSoul(d.persona);
+    // 「读到 N 条」和「分身已就位」都等接口真的返回再加 ——
+    // 否则会在档案还没生成时就提前说「已就位」（而且顺序是乱的）
+    addLine(box, `读到 ${d.count} 条公开创作`, 1240);
+    addLine(box, '分身已就位', 1560, true);
+    for (const k in STORE) delete STORE[k];
+    (d.library || []).forEach((x, i) => { STORE[i + 1] = { t: x.title, s: x.summary, u: x.url || '' }; });
+    setTimeout(() => {
+      $('stage-loading').style.display = 'none';
+      $('stage-ta').classList.remove('hidden');
+      $('stage-ta').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 2300);
+  } catch (e) { showErr('出错：' + e.message); }
+  finally { loadQuota(true); loadMe(); }
+}
+
+function addLine(box, text, delay = 0, done = false) {
+  const el = document.createElement('div');
+  el.className = 'loadline' + (done ? ' done' : '');
+  el.style.animationDelay = (delay / 1000) + 's';
+  el.innerHTML = '<span class="d"></span><span>' + text + '</span>';
+  box.appendChild(el);
+}
+function showErr(msg) {
+  $('stage-loading').style.display = 'block';
+  $('loading-lines').innerHTML = '<div class="err">' + esc(msg || '出错了') + '</div>';
+}
+
+/* ============================================================
+   灵魂档案：Markdown → 结构化渲染
+   ============================================================ */
+function renderSoul(md) {
+  const box = $('soul-rendered');
+  box.innerHTML = mdToHtml(md);
+  $('soul-box').classList.remove('open');
+  $('soul-more').textContent = '展开完整档案 ▾';
+}
+
+function inlineMd(s) {
+  return esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/`(.+?)`/g, '<code style="font-size:12.5px;background:#fff;border:1px solid var(--line);border-radius:4px;padding:0 4px">$1</code>');
+}
+
+/** 极简 Markdown → 结构化 HTML（标题 / 列表 / 引用 / 粗体） */
+function mdToHtml(md) {
+  const lines = (md || '').split('\n');
+  let html = '', list = null, para = [];
+  const flushP = () => { if (para.length) { html += '<p>' + inlineMd(para.join(' ')) + '</p>'; para = []; } };
+  const flushL = () => { if (list) { html += `<ul>${list.join('')}</ul>`; list = null; } };
+
+  for (let raw of lines) {
+    const line = raw.trim();
+    if (!line) { flushP(); flushL(); continue; }
+
+    // 标题：## / ### / 或 「1. 核心关切」这类
+    let m = line.match(/^#{1,6}\s*(.+)$/);
+    if (m) { flushP(); flushL(); html += `<h4>${inlineMd(m[1])}</h4>`; continue; }
+    m = line.match(/^\*\*(.+?)\*\*[：:]?\s*(.*)$/);
+    if (m && m[1].length <= 16) {
+      flushP(); flushL();
+      html += `<h4>${inlineMd(m[1])}</h4>`;
+      if (m[2]) para.push(m[2]);
+      continue;
+    }
+    m = line.match(/^(\d+)[.、]\s*\*\*(.+?)\*\*[：:]?\s*(.*)$/);
+    if (m) {
+      flushP(); flushL();
+      html += `<h4>${inlineMd(m[2])}</h4>`;
+      if (m[3]) para.push(m[3]);
+      continue;
+    }
+
+    // 列表
+    m = line.match(/^[-*·•]\s+(.+)$/) || line.match(/^\d+[.、]\s+(.+)$/);
+    if (m) { flushP(); (list = list || []).push(`<li>${inlineMd(m[1])}</li>`); continue; }
+
+    // 引用
+    m = line.match(/^[>「"]\s*(.+?)[」"]?$/);
+    if (m && /^[>「"]/.test(line)) { flushP(); flushL(); html += `<div class="quote">${inlineMd(m[1])}</div>`; continue; }
+
+    // 分隔线
+    if (/^[-—_]{3,}$/.test(line)) { flushP(); flushL(); continue; }
+
+    flushL(); para.push(line);
+  }
+  flushP(); flushL();
+  return html || '<p>' + esc(md || '') + '</p>';
+}
+
+function toggleSoul() {
+  const b = $('soul-box');
+  b.classList.toggle('open');
+  $('soul-more').textContent = b.classList.contains('open') ? '收起 ▴' : '展开完整档案 ▾';
+}
+
+/* ============================================================
+   幕 4：A2A（SSE 流式）
+   ============================================================ */
+async function startDuel(skipped) {
+  // skipped=true 表示用户选择「暂时跳过」——就用一句自我介绍代班，不带存档
+  const introEl = skipped ? $('intro-skip') : $('intro');
+  const intro = (introEl && introEl.value ? introEl.value : '').trim();
+  const nameEl = skipped ? $('d-myname') : $('myname');
+  myName = ((nameEl && nameEl.value) || ($('myname') && $('myname').value) || '').trim() || '我';
+  introText = intro;
+
+  if (skipped && !intro) {
+    toast('至少写一句吧，不然 TA 的分身不知道在跟谁聊');
+    if (introEl) introEl.focus();
+    return;
+  }
+
+  $('btn-duel').disabled = true;
+  if ($('btn-duel-skip')) $('btn-duel-skip').disabled = true;
+  $('stage-duel').classList.remove('hidden');
+  $('duel-log').innerHTML = '';
+  $('duel-actions').style.display = 'none';
+  dialogue = [];
+  addMsg('sys', '两个分身正在认识彼此……');
+
+  if (!skipped) {
+    try { await jpost('/api/me', { user_id: uid, name: myName, intro: introText }); } catch (e) {}
+  }
+
+  let thinking = showThinking(taName + ' 的分身');
+  try {
+    const resp = await fetch('/api/duel', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sid, intro: introText, my_name: myName,
+        user_id: skipped ? '' : uid,      // 跳过时不带存档 → 后端用自我介绍代班
+        rounds: 3
+      })
+    });
+    // ⚠️ 必须检查响应状态：接口报错时 body 不是 SSE（拿不到任何事件），
+    // 旧代码会安静地什么都不做 —— 界面永远停在「正在想…」，用户以为卡死了。
+    if (!resp.ok) {
+      let msg = '对话没能开始（' + resp.status + '）';
+      try { const j = await resp.json(); if (j.detail) msg = j.detail; } catch (e) {}
+      if (thinking) { thinking.remove(); thinking = null; }
+      addMsg('sys', '（' + msg + '）');
+      $('duel-actions').style.display = 'block';
+      return;
+    }
+    const reader = resp.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n\n'); buf = parts.pop();
+      for (const p of parts) {
+        if (!p.startsWith('data: ')) continue;
+        const ev = JSON.parse(p.slice(6));
+        if (ev.type === 'turn') {
+          if (thinking) { thinking.remove(); thinking = null; }
+          dialogue.push({ name: ev.name, text: ev.text, key: ev.key });
+          addMsg(ev.key === 'a' ? 'ta' : 'me', ev.text, ev.evidence, ev.name);
+          thinking = showThinking((ev.key === 'a' ? myName : taName) + ' 的分身');
+        } else if (ev.type === 'done') {
+          if (thinking) { thinking.remove(); thinking = null; }
+          addMsg('sys', `对话结束 · 共 ${ev.count} 条`);
+          $('duel-actions').style.display = 'block';
+          loadMe();
+        } else if (ev.type === 'error') {
+          if (thinking) { thinking.remove(); thinking = null; }
+          addMsg('sys', '（对话中断：' + ev.error + '）');
+        }
+      }
+    }
+  } catch (e) {
+    if (thinking) thinking.remove();
+    addMsg('sys', '（出错：' + e.message + '）');
+  } finally {
+    $('btn-duel').disabled = false;
+    if ($('btn-duel-skip')) $('btn-duel-skip').disabled = false;
+    loadQuota(true);
+  }
+}
+
+function showThinking(who) {
+  const el = document.createElement('div');
+  el.className = 'thinking';
+  el.innerHTML = '<span class="d"></span><span class="d"></span><span class="d"></span><span>' + esc(who) + ' 正在想…</span>';
+  $('duel-log').appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return el;
+}
+
+function addMsg(who, text, evidence = '', name = '') {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg ' + who;
+  if (who !== 'sys') {
+    const initial = (name || '?').slice(0, 1);
+    const label = document.createElement('div');
+    label.className = 'who';
+    label.innerHTML = `<span class="av">${esc(initial)}</span>${esc((name || '') + ' 的分身')}`;
+    wrap.appendChild(label);
+  }
+  const bub = document.createElement('div');
+  bub.className = 'bub';
+  bub.textContent = text;
+  wrap.appendChild(bub);
+
+  if (who === 'ta' || who === 'me') {
+    const basis = document.createElement('div');
+    basis.className = 'basis';
+    basis.innerHTML = '<span class="lb">依据</span>';
+    const ids = evidence ? [...new Set((evidence.match(/\[(\d+)\]/g) || []).map(s => +s.replace(/\D/g, '')))] : [];
+    const hit = ids.filter(id => STORE[id]);
+    if (hit.length) {
+      hit.forEach(id => {
+        const rec = STORE[id];
+        const pop = document.createElement('div');
+        pop.className = 'pop';
+        pop.innerHTML = `<b>《${esc(rec.t)}》</b><br>${esc(rec.s)}` +
+          (rec.u ? `<br><a href="${esc(rec.u)}" target="_blank" rel="noopener">查看原文 ↗</a>` : '');
+        const c = document.createElement('span');
+        c.className = 'chip'; c.textContent = '[' + id + '] ' + rec.t.slice(0, 16) + '…';
+        c.onclick = () => pop.classList.toggle('show');
+        basis.appendChild(c); wrap.appendChild(pop);
+      });
+    } else {
+      const c = document.createElement('span');
+      c.className = 'chip none';
+      c.textContent = '无（TA 没写过这个话题）';
+      basis.appendChild(c);
+    }
+    wrap.appendChild(basis);
+  }
+  $('duel-log').appendChild(wrap);
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return wrap;
+}
+
+/* ============================================================
+   幕 5：破冰卡
+   ============================================================ */
+async function makeCard() {
+  const b = $('btn-ice');
+  b.disabled = true; b.textContent = '正在写……';
+  try {
+    const d = await jpost('/api/icebreak', { session_id: sid, intro: introText, dialogue });
+    if (!d.ok) { toast(d.error); return; }
+    renderIce(d.card, d.ta_name || taName);
+    $('stage-card').classList.remove('hidden');
+    $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) { toast('出错：' + e.message); }
+  finally { b.disabled = false; b.textContent = '这场对话告诉了我什么？'; loadQuota(true); }
+}
+
+function pick(raw, title, next) {
+  const re = new RegExp('【' + title + '】([\\s\\S]*?)(?=【' + next + '】|$)');
+  const m = raw.match(re);
+  return m ? m[1].trim() : '';
+}
+
+function renderIce(raw, name) {
+  const insight = pick(raw, '一句话洞察', 'TA 眼中的你');
+  const view = pick(raw, 'TA 眼中的你', '开场白');
+  const openers = pick(raw, '开场白', '两个兴趣点');
+  const points = pick(raw, '两个兴趣点', '\u0000');
+  const lines = openers.split('\n').map(s => s.replace(/^\d+[.、)]\s*/, '').trim()).filter(s => s.length > 4);
+
+  // 存下来给「导出图片」用
+  window.__ICE = { name, insight, view, openers: lines, points };
+
+  let h = `
+    <div class="ice-top">
+      <div>
+        <div class="ice-brand">社恐破冰船 · BREAKING ICE</div>
+        <div class="ice-title">${esc(name)} 的破冰卡</div>
+      </div>
+      <div class="ice-to">给你的第 1 句</div>
+    </div>
+    <div class="ice-body">`;
+
+  // 「TA 眼中的你」是最大钩子 —— 放最前面、最醒目
+  if (view) h += `<div class="ice-sec"><div class="t">TA 眼中的你</div><div class="ice-hl">${esc(view)}</div></div>`;
+  if (insight) h += `<div class="ice-sec"><div class="t">一句话洞察</div><div class="c">${esc(insight)}</div></div>`;
+  if (lines.length) {
+    h += `<div class="ice-sec"><div class="t">三句开场白 · 点一下复制</div>`;
+    lines.forEach((s, i) => {
+      h += `<div class="opener"><span class="num">${i + 1}</span><span class="txt">${esc(s)}</span>
+            <span class="cp" data-txt="${esc(s)}" onclick="copyOpener(this)">复制</span></div>`;
+    });
+    h += `</div>`;
+  }
+  if (points) h += `<div class="ice-sec"><div class="t">两个兴趣点</div><div class="c">${esc(points)}</div></div>`;
+  h += `</div>
+    <div class="ice-foot">
+      这张卡基于 TA 的公开内容推演，<b>不是 TA 本人的真实想法</b>。<br>
+      真正的答案，只有你开口之后才知道。
+    </div>`;
+  $('ice-card').innerHTML = h;
+}
+
+function copyOpener(el) {
+  const txt = el.dataset.txt || el.parentElement.querySelector('.txt').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    el.textContent = '已复制 ✓'; el.classList.add('done');
+    toast('开场白已复制');
+    setTimeout(() => { el.textContent = '复制'; el.classList.remove('done'); }, 1600);
+  }).catch(() => toast('复制失败，请手动选择'));
+}
+
+/** 把破冰卡画成图片（保存 / 分享用） */
+function exportCard() {
+  const d = window.__ICE;
+  if (!d) { toast('还没有破冰卡'); return; }
+
+  const F = '"Microsoft YaHei", "PingFang SC", sans-serif';
+  const W = 900, PAD = 56, INNER = W - PAD * 2;
+  const cvs = document.createElement('canvas');
+  const ctx = cvs.getContext('2d');
+
+  const wrapText = (text, font, maxW) => {
+    ctx.font = font;
+    const out = [];
+    String(text || '').split('\n').forEach(para => {
+      if (!para) { out.push(''); return; }
+      let line = '';
+      for (const ch of para) {
+        if (line && ctx.measureText(line + ch).width > maxW) { out.push(line); line = ch; }
+        else line += ch;
+      }
+      out.push(line);
+    });
+    return out;
+  };
+
+  // ---- 1. 先算高度 ----
+  let h = 0;
+  h += 118;                                   // 头部
+  const blocks = [];
+  if (d.view) { const L = wrapText(d.view, '600 26px ' + F, INNER - 40); blocks.push({ t: 'TA 眼中的你', lines: L, hl: true, f: '600 26px ' + F, lh: 42 }); }
+  if (d.insight) { const L = wrapText(d.insight, '23px ' + F, INNER); blocks.push({ t: '一句话洞察', lines: L, f: '23px ' + F, lh: 36 }); }
+  if (d.openers.length) { blocks.push({ t: '三句开场白', list: d.openers.map(s => wrapText(s, '23px ' + F, INNER - 70)) }); }
+  if (d.points) { const L = wrapText(d.points, '23px ' + F, INNER); blocks.push({ t: '两个兴趣点', lines: L, f: '23px ' + F, lh: 36 }); }
+
+  blocks.forEach(b => {
+    h += 46;                                  // 小标题
+    if (b.hl) h += b.lines.length * b.lh + 34;
+    else if (b.list) b.list.forEach(l => { h += l.length * 36 + 22; });
+    else h += b.lines.length * b.lh + 10;
+  });
+  h += 92;                                    // 页脚
+
+  cvs.width = W; cvs.height = h;
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#FFFDF8'); g.addColorStop(1, '#FFF8EC');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, h);
+
+  // 虚线内框
+  ctx.strokeStyle = 'rgba(232,163,61,.42)'; ctx.lineWidth = 2; ctx.setLineDash([7, 7]);
+  ctx.strokeRect(20, 20, W - 40, h - 40); ctx.setLineDash([]);
+
+  // ---- 2. 头部 ----
+  ctx.fillStyle = '#B8863A'; ctx.font = 'bold 15px ' + F;
+  ctx.fillText('社恐破冰船 · BREAKING ICE', PAD, 76);
+  ctx.fillStyle = '#4A3A1E'; ctx.font = 'bold 34px ' + F;
+  ctx.fillText(d.name + ' 的破冰卡', PAD, 122);
+  ctx.strokeStyle = 'rgba(232,163,61,.38)'; ctx.setLineDash([5, 6]);
+  ctx.beginPath(); ctx.moveTo(PAD, 152); ctx.lineTo(W - PAD, 152); ctx.stroke(); ctx.setLineDash([]);
+
+  // ---- 3. 内容 ----
+  let y = 198;
+  blocks.forEach(b => {
+    ctx.fillStyle = '#B8863A'; ctx.font = 'bold 14px ' + F;
+    ctx.fillText('◆ ' + b.t, PAD, y);
+    y += 30;
+
+    if (b.hl) {
+      ctx.fillStyle = 'rgba(255,255,255,.75)';
+      ctx.fillRect(PAD, y - 4, INNER, b.lines.length * b.lh + 24);
+      ctx.fillStyle = '#E8A33D';
+      ctx.fillRect(PAD, y - 4, 5, b.lines.length * b.lh + 24);
+      ctx.fillStyle = '#4A3A1E'; ctx.font = b.f;
+      b.lines.forEach(l => { ctx.fillText(l, PAD + 22, y + 28); y += b.lh; });
+      y += 26;
+    } else if (b.list) {
+      b.list.forEach((ls, i) => {
+        ctx.fillStyle = 'rgba(255,255,255,.8)';
+        ctx.fillRect(PAD, y - 2, INNER, ls.length * 36 + 18);
+        ctx.strokeStyle = '#F0D9B0'; ctx.lineWidth = 1;
+        ctx.strokeRect(PAD, y - 2, INNER, ls.length * 36 + 18);
+        ctx.fillStyle = '#B8863A'; ctx.font = 'bold 16px ' + F;
+        ctx.fillText(String(i + 1), PAD + 18, y + 26);
+        ctx.fillStyle = '#4A3A1E'; ctx.font = '23px ' + F;
+        ls.forEach(l => { ctx.fillText(l, PAD + 52, y + 26); y += 36; });
+        y += 20;
+      });
+    } else {
+      ctx.fillStyle = '#4A3A1E'; ctx.font = b.f;
+      b.lines.forEach(l => { ctx.fillText(l, PAD, y + 22); y += b.lh; });
+      y += 14;
+    }
+    y += 18;
+  });
+
+  // ---- 4. 页脚 ----
+  ctx.strokeStyle = 'rgba(232,163,61,.38)'; ctx.setLineDash([5, 6]);
+  ctx.beginPath(); ctx.moveTo(PAD, h - 74); ctx.lineTo(W - PAD, h - 74); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#9B7B45'; ctx.font = '17px ' + F;
+  ctx.fillText('基于 TA 的公开内容推演，不是 TA 本人的真实想法。', PAD, h - 44);
+  ctx.fillText('真正的答案，只有你开口之后才知道。', PAD, h - 18);
+
+  // ---- 5. 下载 ----
+  cvs.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '破冰卡-' + d.name + '.png';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast('已保存 · 可以直接发给 TA 或存起来');
+  }, 'image/png');
+}
+
+function againOne() {
+  ['stage-ta', 'stage-duel', 'stage-card'].forEach(i => $(i).classList.add('hidden'));
+  $('stage-hook').classList.remove('hidden');
+  $('nick').value = ''; $('nick').focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ============================================================
+   个人中心
+   ============================================================ */
+function openDrawer() { dismissMeBubble(); $('drawer').classList.add('show'); $('overlay').classList.add('show'); loadMe(); }
+function closeDrawer() { $('drawer').classList.remove('show'); $('overlay').classList.remove('show'); }
+
+/** 顶栏身份的**唯一**渲染入口（别在其他地方直接写 top-name / top-av）。
+ *  优先级：知乎已登录 > 有本地分身 > 都没有。 */
+function _renderTopInner() {
+  const av = $('top-av'), nm = $('top-name'), dot = $('top-dot');
+  const p = (ZHIHU && ZHIHU.logged_in) ? (ZHIHU.profile || {}) : null;
+
+  if (p) {                                  // 1) 知乎身份
+    const name = p.fullname || '我';
+    const url = p.avatar || p.avatar_path || '';
+    av.classList.remove('empty');
+    if (url) {
+      const init = esc(name.slice(0, 1));
+      av.innerHTML = `<img src="${esc(url)}" alt="" ` +
+                     `onerror="this.parentElement.textContent='${init}'">`;
+    } else {
+      av.textContent = name.slice(0, 1);
+    }
+    nm.textContent = name;
+    dot.style.display = 'inline-block';
+    return;
+  }
+
+  if (ME && ME.exists) {                    // 2) 本地分身
+    const name = ME.name || '我';
+    av.classList.remove('empty');
+    av.textContent = name.slice(0, 1);
+    nm.textContent = name;
+    dot.style.display = 'inline-block';
+    return;
+  }
+
+  av.textContent = '我';                    // 3) 都没有
+  av.classList.add('empty');
+  nm.textContent = '我的分身';
+  dot.style.display = 'none';
+}
+
+/** 顶栏的整体形态：还没建分身 → 虚线空位卡（+ 建我的分身）；已建 → 常规胶囊。 */
+function renderTop() {
+  _renderTopInner();
+  const built = !!((ZHIHU && ZHIHU.logged_in) || (ME && ME.exists));
+  const entry = $('me-entry');
+  if (entry) entry.classList.toggle('empty-st', !built);
+  if (!built) {
+    const av = $('top-av'), nm = $('top-name');
+    av.textContent = '+';
+    av.classList.add('empty');
+    nm.textContent = '建我的分身';
+  }
+  updateMeBubble(!built);
+}
+
+/** 首次访问的引导气泡：只在「还没建分身」且没点过时出现，12 秒后自动收起 */
+function updateMeBubble(show) {
+  const b = $('me-bubble');
+  if (!b) return;
+  let seen = false;
+  try { seen = localStorage.getItem('salt_tip_me') === '1'; } catch (e) {}
+  if (show && !seen) {
+    if (b.classList.contains('show')) return;   // 已在显示就别重置计时（renderTop 会被调很多次）
+    b.classList.add('show');
+    clearTimeout(b._h);
+    b._h = setTimeout(dismissMeBubble, 12000);
+  } else {
+    b.classList.remove('show');
+  }
+}
+function dismissMeBubble() {
+  const b = $('me-bubble');
+  if (b) { b.classList.remove('show'); clearTimeout(b._h); }
+  try { localStorage.setItem('salt_tip_me', '1'); } catch (e) {}
+}
+
+/** 切换抽屉里 persona 的查看/编辑态 */
+function togglePersonaEdit(edit) {
+  $('d-view-wrap').style.display = edit ? 'none' : 'block';
+  $('d-edit-inner').style.display = edit ? 'block' : 'none';
+}
+
+/** 把 persona markdown 渲染到抽屉的查看区 —— 复用 TA 灵魂档案那套解析（mdToHtml），
+ *  样式走 .persona-doc（更小的字号、更松的行距、小标题分色）。 */
+function renderPersonaView(md) {
+  const el = $('d-persona-rendered');
+  if (!el) return;
+  el.innerHTML = mdToHtml(md || '');
+}
+
+async function loadMe() {
+  $('d-key').textContent = uid;
+  try {
+    const d = await (await fetch('/api/me?user_id=' + uid)).json();
+    ME = (d && d.exists) ? d : null;
+    renderTop();
+    if (d.exists) {
+      myName = d.name || '我';
+      $('d-name').textContent = d.name;
+      renderPersonaView(d.persona || '');
+      $('d-persona').value = d.persona || '';
+      togglePersonaEdit(false);
+
+      const srcMap = { zhihu: `来自你在知乎的 ${d.count || 0} 条创作`, manual: '来自你写的自我介绍', edited: '你手动修改过' };
+      const srcTxt = srcMap[d.source] || '';
+      $('d-src').textContent = srcTxt ? '✓ ' + srcTxt : '✓ 已就位';
+      $('d-src').style.display = 'inline-block';
+      $('d-desc').textContent = '建一次，以后认识谁都用它——不用重复建，随时可以改。';
+      $('d-edit-wrap').style.display = 'block';
+      $('d-create-wrap').style.display = 'none';
+      $('d-persona').value = d.persona || '';
+
+      $('me-status').style.display = 'flex';
+      $('me-status').innerHTML = `<span class="ico">✓</span><span>你的分身「${esc(d.name)}」已就位${srcTxt ? '（' + esc(srcTxt) + '）' : ''}。可直接开始，也可以在个人中心里改。</span>`;
+      $('btn-edit').style.display = 'inline-block';
+      $('btn-duel').textContent = '开始对话（用我的分身）';
+      $('intro').value = d.intro || '';
+      $('myname').value = d.name || '';
+      $('d-intro').value = d.intro || '';
+      $('d-myname').value = d.name || '';
+      showMeSection(true);
+    } else {
+      $('d-name').textContent = '还没建';
+      $('d-src').style.display = 'none';
+      $('d-edit-wrap').style.display = 'none';
+      $('d-create-wrap').style.display = 'block';
+      showMeSection(false);
+    }
+  } catch (e) {}
+}
+
+let BUILDING = false;   // 正在生成分身：期间不让 loadMe 把进度卡顶掉
+
+/** 幕 3 的「你」这一块：有分身 → 显示状态和开始按钮；没有 → 显示醒目提示 */
+function showMeSection(hasMe) {
+  if (BUILDING) return;                  // 生成中：界面交给进度卡
+  if ($('me-need')) $('me-need').style.display = hasMe ? 'none' : 'block';
+  if ($('me-ready')) $('me-ready').style.display = hasMe ? 'block' : 'none';
+  if ($('me-skipped')) $('me-skipped').style.display = 'none';
+  if ($('me-building')) $('me-building').style.display = 'none';
+}
+
+/** 就在流程里生成 —— 但必须先有知乎授权（否则读不到「你的」内容） */
+async function buildMeInline() {
+  const b = $('btn-build-inline');
+  const okToGo = await ensureZhihuLogin();
+  if (!okToGo) return;
+
+  const name = ($('d-myname').value || '').trim() || '我';
+  b.disabled = true; b.textContent = '正在为你生成…';
+  const stopProgress = startBuildProgress();   // 占住那 10 秒，别让界面空着
+  try {
+    const d = await jpost('/api/me', { user_id: uid, name, intro: '' });
+    if (!d.ok) { toast(d.error || '生成失败', 3800); return; }
+    toast(`好了 · 基于你在知乎的 ${d.count} 条创作`, 3000);
+    await loadMe();
+  } catch (e) { toast('出错：' + e.message); }
+  finally { stopProgress(); b.disabled = false; b.textContent = '用知乎账号登录并生成'; loadQuota(true); }
+}
+
+/**
+ * 生成分身时的进度动画：把授权按钮那张卡换成「正在生成」，
+ * 逐条点亮步骤，占住那 10 秒（内容多时更久）的等待。
+ * 返回一个 stop() —— 生成结束时调用，收尾并复位。
+ */
+function startBuildProgress() {
+  BUILDING = true;
+  $('me-need').style.display = 'none';
+  $('me-ready').style.display = 'none';
+  $('me-skipped').style.display = 'none';
+  $('me-building').style.display = 'block';
+  // 关键：登录后自动生成时，用户正停在「个人中心」抽屉里，
+  // 而幕 3 还没显示 —— 所以抽屉里也要有一份，否则界面上什么都看不到。
+  const btn = $('d-build');
+  const btnRow = btn ? btn.closest('.row') : null;
+  if (btnRow) btnRow.style.display = 'none';
+  if ($('d-building')) $('d-building').style.display = 'block';
+
+  const steps = [
+    '已连上你的知乎账号',
+    '已读到你的公开创作',
+    '已提取你的观点和表达习惯',
+    '已为你画出灵魂档案',
+    '已完成，正在就位',
+  ];
+  const boxes = ['build-steps', 'd-build-steps'].map(id => $(id)).filter(Boolean);
+  boxes.forEach(b => { b.innerHTML = ''; });
+  let i = 0;
+  const add = () => {
+    if (i >= steps.length) return;
+    boxes.forEach(b => {
+      const prev = b.lastElementChild;          // 上一条标记完成
+      if (prev) { prev.classList.add('done'); const pd = prev.querySelector('.d'); if (pd) pd.textContent = '✓'; }
+      const el = document.createElement('div');
+      el.className = 'loadline';
+      el.innerHTML = `<span class="d"></span><span>${steps[i]}</span>`;
+      b.appendChild(el);
+    });
+    i++;
+  };
+  add();
+  const timer = setInterval(() => { if (i < steps.length) add(); }, 2600);
+  return function stop() {
+    clearInterval(timer);
+    BUILDING = false;
+    boxes.forEach(b => {
+      [...b.children].forEach(el => {          // 全部收尾为已完成
+        el.classList.add('done');
+        const d = el.querySelector('.d'); if (d) d.textContent = '✓';
+      });
+    });
+    if ($('me-building')) $('me-building').style.display = 'none';
+    if ($('d-building')) $('d-building').style.display = 'none';
+    if (btnRow) btnRow.style.display = '';
+    showMeSection(!!(ME && ME.exists));   // 收尾后按当前状态重新摆好各块
+  };
+}
+
+/** 统一入口：确保已登录知乎。返回 true 表示可以继续 */
+async function ensureZhihuLogin() {
+  try {
+    const st = await (await fetch('/api/oauth/status')).json();
+    if (!st.configured) {
+      toast('知乎登录还没配置好（App ID / Key 待领取）——先用「暂时跳过」吧', 4200);
+      return false;
+    }
+    const me = await (await fetch('/api/oauth/me')).json();
+    if (me.logged_in) return true;
+    if (confirm('生成你的分身，需要先用知乎账号登录并授权。\n\n我们只读你在知乎的公开创作，不碰私信、关注列表或任何非公开数据。\n\n现在去登录？')) {
+      zhihuLogin();
+    }
+    return false;
+  } catch (e) {
+    toast('检查登录状态出错：' + e.message);
+    return false;
+  }
+}
+
+/** 暂时跳过：给一句代班的自我介绍 */
+function skipMe() {
+  $('me-need').style.display = 'none';
+  $('me-ready').style.display = 'none';
+  $('me-skipped').style.display = 'block';
+  if ($('intro-skip')) $('intro-skip').focus();
+}
+function backToBuild() {
+  $('me-skipped').style.display = 'none';
+  $('me-ready').style.display = 'none';
+  $('me-need').style.display = 'block';
+}
+
+async function buildMe() {
+  const b = $('d-build');
+  const okToGo = await ensureZhihuLogin();
+  if (!okToGo) return;
+
+  const intro = ($('d-intro').value || '').trim();
+  const name = ($('d-myname').value || '').trim() || '我';
+  b.disabled = true; b.textContent = '正在为你生成…';
+  const stopProgress = startBuildProgress();
+  try {
+    const d = await jpost('/api/me', { user_id: uid, name, intro });
+    if (!d.ok) { toast(d.error || '生成失败', 3800); return; }
+    toast(`好了 · 基于你在知乎的 ${d.count} 条创作`, 3000);
+    await loadMe();
+  } catch (e) { toast('出错：' + e.message); }
+  finally { stopProgress(); b.disabled = false; b.textContent = '用知乎账号登录并生成'; loadQuota(true); }
+}
+
+async function savePersona() {
+  const persona = $('d-persona').value.trim();
+  if (!persona) { toast('档案不能为空'); return; }
+  try {
+    const d = await jpost('/api/me', { user_id: uid, name: myName, persona });
+    if (d.ok) { toast('已保存 · 之后对话就用你改过的档案'); loadMe(); }
+  } catch (e) { toast('出错：' + e.message); }
+}
+
+function copyKey() {
+  navigator.clipboard.writeText(uid)
+    .then(() => toast('钥匙已复制 · 换设备时粘回来就能找回'))
+    .catch(() => toast('复制失败，请手动选择'));
+}
+
+/** 锁孔：用别处的钥匙进入 */
+function useKey() {
+  const k = ($('d-key-in').value || '').trim();
+  if (!k) { toast('先把钥匙粘进来'); $('d-key-in').focus(); return; }
+  if (!/^u[a-z0-9]{6,}$/i.test(k)) {
+    $('key-hint').innerHTML = '<span style="color:var(--danger)">这把钥匙看起来不对——应该是 <b>u</b> 开头的一串字符。</span>';
+    return;
+  }
+  if (k === uid) { toast('这就是你当前在用的钥匙'); return; }
+  localStorage.setItem('salt_uid', k);
+  toast('换好了，正在打开你的分身…', 1600);
+  setTimeout(() => location.reload(), 700);
+}
+
+/* ============================================================
+   OAuth
+   ============================================================ */
+async function checkOauth() {
+  try {
+    const d = await (await fetch('/api/oauth/status')).json();
+    if (!d.configured) {
+      $('o-title').textContent = '暂未开放';
+      $('o-desc').textContent = '知乎账号登录将在项目提报入口开放后接入（需 App ID / Key）';
+      return;
+    }
+    const me = await (await fetch('/api/oauth/me')).json();
+    ZHIHU = me;
+    renderTop();
+    if (me.logged_in) {
+      $('o-title').textContent = '已登录：' + (me.profile.fullname || '');
+      $('o-desc').textContent = '你的分身会优先来自你自己的知乎创作';
+      $('o-btn').style.display = 'none';
+      // OAuth 回来自动生成分身（不让用户多点一步）
+      const meData = await (await fetch('/api/me?user_id=' + uid)).json();
+      if (!meData.exists) {
+        openDrawer();
+        await buildMeInline();
+      } else if (new URLSearchParams(location.search).has('oauth')) {
+        openDrawer();
+      }
+    } else {
+      $('o-btn').style.display = 'inline-block';
+    }
+  } catch (e) {}
+}
+async function zhihuLogin() {
+  try {
+    const d = await (await fetch('/api/oauth/url')).json();
+    if (!d.ok) { toast(d.error); return; }
+    location.href = d.url;
+  } catch (e) { toast('出错：' + e.message); }
+}
+(function oauthResult() {
+  const p = new URLSearchParams(location.search), r = p.get('oauth');
+  if (!r) return;
+  toast(r === 'ok' ? '知乎账号授权成功' : '授权失败：' + (p.get('msg') || '未知原因'), 3200);
+  history.replaceState({}, '', '/');
+})();
+
+/* ============================================================
+   额度 / 初始化
+   ============================================================ */
+/**
+ * 额度显示策略：平时不占首屏（摆在首屏像后台调试数据没删干净）；
+ * 只在「刚生成过」时短暂露一下消耗，或额度偏低时常驻提醒。
+ */
+async function loadQuota(reveal = false) {
+  const el = $('quota');
+  if (!el) return;
+  try {
+    const d = await (await fetch('/api/quota')).json();
+    if (!d.ok) { el.style.display = 'none'; return; }
+    if (d.remaining <= 100) {                      // 快用完了就常驻，别到跑不动才发现
+      el.textContent = `直答额度偏低：剩余 ${d.remaining} / ${d.total}`;
+      el.style.color = 'var(--danger)';
+      el.style.display = 'block';
+      return;
+    }
+    el.style.color = '';
+    if (!reveal) { el.style.display = 'none'; return; }
+    el.textContent = `直答额度：今日剩余 ${d.remaining} / ${d.total}`;
+    el.style.display = 'block';
+    clearTimeout(el._h);
+    el._h = setTimeout(() => { el.style.display = 'none'; }, 8000);
+  } catch (e) { el.style.display = 'none'; }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+loadQuota();
+loadMe();
+checkOauth();
+// OAuth 回调带 ?oauth=ok → 清掉它，否则刷新会再走一遍
+if (location.search.includes('oauth=ok')) {
+  history.replaceState(null, '', location.pathname);
+}
+</script>
+</body>
+</html>

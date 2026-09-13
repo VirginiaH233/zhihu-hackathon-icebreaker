@@ -1,0 +1,23 @@
+# 不进镜像的东西
+# ⚠️ 注意：不要排除 *.md —— prompts/*.md 是运行时必需的（后端要读提示词）
+.git/
+.gitignore
+.env
+data/
+archive/
+logs/
+tests/
+skill_unzip/
+*.zip
+*.bak
+*.bak-*
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+venv/
+.venv/
+.dbg.json
+.duel.json
+.card.txt
+设计预览-*.html
