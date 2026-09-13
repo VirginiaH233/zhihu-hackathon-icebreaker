@@ -597,10 +597,151 @@ button.wide { width: 100%; }
   transition: opacity .28s, transform .28s; z-index: 100; box-shadow: var(--sh-2);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* ============================================================
+   登录门（v5 · 登录前置）
+   颜色一律用产品自己的「清晨海面」变量，不另起一套
+   ============================================================ */
+#gate { max-width: 1040px; padding: 34px 2px 40px; }
+.gate-grid { display: flex; flex-direction: column-reverse; gap: 26px; }
+.gate-brand { font-size: 14px; font-weight: 700; letter-spacing: .04em; color: var(--ink-soft);
+  display: flex; align-items: center; gap: 10px; }
+.gate-brand em { font-style: normal; color: var(--brand); }
+.gate-tag { font-size: 11.5px; font-weight: 600; color: var(--brand); background: var(--brand-soft);
+  border-radius: 999px; padding: 4px 10px; }
+.gate-hook { font-size: 33px; line-height: 1.34; font-weight: 800; letter-spacing: -.01em; margin: 20px 0 0; }
+.gate-hook .hl { color: var(--accent); }
+.gate-sub { font-size: 14.5px; line-height: 1.85; color: var(--sub); margin: 14px 0 0; }
+.gate-sub strong { color: var(--ink); }
+.gate-cta { margin-top: 26px; display: flex; flex-direction: column; gap: 10px; }
+.gate-tiny { font-size: 12.5px; color: var(--sub); text-align: center; margin: 0; line-height: 1.7; }
+.gate-link { color: var(--brand); font-weight: 600; cursor: pointer; border-bottom: 1px dashed var(--line-strong); }
+.gate-link:hover { border-bottom-color: var(--brand); }
+.gate-foot { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line-soft);
+  font-size: 12px; color: var(--sub); line-height: 1.8; text-align: center; }
+
+/* 三张牌（翻牌：手机点、电脑点/悬停都能触发，不依赖 hover） */
+.gate-visual { text-align: center; }
+.deck { display: flex; justify-content: center; gap: 12px; }
+.gcard { position: relative; width: 96px; height: 146px; cursor: pointer;
+  transform-style: preserve-3d; transition: transform .55s cubic-bezier(.2,.8,.2,1); }
+.gcard:hover { transform: translateY(-5px); }
+.gcard.flip { transform: rotateY(180deg); }
+.gcard .gface { position: absolute; inset: 0; border-radius: 14px; backface-visibility: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 11px; text-align: center;
+  font-size: 12.5px; line-height: 1.6; }
+.gcard .gback { background: linear-gradient(160deg, var(--brand) 0%, var(--brand-deep) 100%);
+  color: #fff; font-size: 26px; font-weight: 700; box-shadow: 0 4px 14px rgba(62,124,177,.28); }
+.gcard .gfront { background: var(--card); border: 1px solid var(--line); color: var(--ink);
+  transform: rotateY(180deg); box-shadow: 0 2px 8px rgba(31,45,61,.06); }
+.deck-hint { margin-top: 14px; font-size: 12.5px; color: var(--sub); min-height: 18px; }
+.deck-hint.done { color: var(--brand-deep); font-weight: 700; }
+#gate-btn.pulse { animation: gpulse 1.7s ease-in-out infinite; }
+@keyframes gpulse {
+  0%,100% { box-shadow: 0 2px 8px rgba(232,163,61,.30); }
+  50%     { box-shadow: 0 0 0 8px rgba(232,163,61,.16), 0 6px 20px rgba(232,163,61,.40); }
+}
+
+/* 示例（虚构；零 LLM、零隐私） */
+.sample { margin-top: 26px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 20px; box-shadow: 0 1px 3px rgba(31,45,61,.05); }
+.sample-h { font-size: 13px; color: var(--sub); line-height: 1.85; }
+.sample-h b { color: var(--danger); }
+.sample-block { margin-top: 16px; }
+.sample-lb { font-size: 12px; font-weight: 700; color: var(--brand); letter-spacing: .04em; margin-bottom: 8px; }
+.sample-chip { background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  padding: 11px 13px; font-size: 13.5px; margin-bottom: 8px;
+  display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.sample-chip span { font-size: 11.5px; color: var(--sub); white-space: nowrap; }
+.sample-quote { background: var(--accent-soft); border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm); padding: 14px 16px; font-size: 14px; line-height: 1.9; }
+.sample-from { font-size: 11.5px; color: var(--sub); margin-top: 8px; line-height: 1.7; }
+.sample-foot { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft);
+  font-size: 12.5px; color: var(--sub); }
+
+/* 电脑：左右分栏（文案在左、牌在右）；手机：牌在上、文案在下 */
+@media (min-width: 900px) {
+  #gate { padding: 64px 2px 50px; }
+  .gate-grid { flex-direction: row; align-items: center; gap: 56px; }
+  .gate-main { flex: 1; min-width: 0; }
+  .gate-visual { flex: 0 0 auto; }
+  .gate-hook { font-size: 46px; }
+  .gate-sub { font-size: 16px; max-width: 430px; }
+  .gate-cta { max-width: 340px; }
+  .gate-tiny { text-align: left; }
+  .gcard { width: 118px; height: 178px; }
+  .gcard .gface { font-size: 13.5px; }
+  .sample { margin-top: 40px; padding: 26px 30px; }
+}
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<!-- ========== 登录门（v5：登录前置，未登录只能看到这一屏）========== -->
+<div class="wrap" id="gate">
+  <div class="gate-grid">
+    <div class="gate-main">
+      <div class="gate-brand">社恐<em>破冰船</em><span class="gate-tag">知乎黑客松 2026</span></div>
+
+      <h1 class="gate-hook">有多少话，<br>卡在<span class="hl">喉咙里</span>？</h1>
+      <p class="gate-sub">
+        输入一个你想认识的知乎答主，让 TA 的分身先跟你聊两句 ——
+        最后给你一句<strong>能直接发出去的话</strong>。
+      </p>
+
+      <div class="gate-cta">
+        <button class="accent wide" id="gate-btn" onclick="zhihuLogin()">用知乎账号登录</button>
+        <p class="gate-tiny">只读你的公开创作 · 不碰私信、不碰关注列表</p>
+        <p class="gate-tiny"><span class="gate-link" onclick="toggleSample()">先看看长什么样 →</span></p>
+      </div>
+    </div>
+
+    <div class="gate-visual">
+      <div class="deck" id="gate-deck">
+        <div class="gcard"><div class="gface gback">？</div><div class="gface gfront">「我看过你那篇… 想问一句」</div></div>
+        <div class="gcard"><div class="gface gback">？</div><div class="gface gfront">「这事我也踩过坑，你怎么想？」</div></div>
+        <div class="gcard"><div class="gface gback">？</div><div class="gface gfront">「我不太懂，能给我讲讲吗」</div></div>
+      </div>
+      <div class="deck-hint" id="gate-hint">点一下那三张牌</div>
+    </div>
+  </div>
+
+  <!-- 示例（虚拟，零 LLM；点「先看看长什么样」展开） -->
+  <div class="sample" id="gate-sample" style="display:none">
+    <div class="sample-h">示例 —— 如果 TA 是「@林一」（<b>虚构的人，内容全是编的</b>），你能拿到这些东西：</div>
+
+    <div class="sample-block">
+      <div class="sample-lb">他最在行的</div>
+      <div class="sample-chip">聊「一个人怎么把兴趣变成专业」<span>他写过 3 篇</span></div>
+      <div class="sample-chip">聊「小团队怎么活下来」<span>他写过 2 篇</span></div>
+    </div>
+
+    <div class="sample-block">
+      <div class="sample-lb">你可以直接发出去的一句话</div>
+      <div class="sample-quote">
+        「你写的那句『先把东西做出来，再谈热爱』我记了很久。我最近也在纠结要不要转行做这件事，
+        你当时是怎么下决心的？」
+      </div>
+      <div class="sample-from">—— 针对他《我是怎么从爱好者变成从业者的》那篇 · 点开就能跳到原文</div>
+    </div>
+
+    <div class="sample-foot">登录后，把「@林一」换成你真正想认识的那个人。</div>
+  </div>
+
+  <div class="gate-foot">分身基于公开内容构建，不代表本人想法 · 我们做连接，不做评价</div>
+</div>
+
+<div class="wrap" id="app" style="display:none">
+<script>
+/* 上次已登录过 → 先按「已登录」显示，避免回访用户看到登录门闪一下。
+   真状态由 checkOauth() 校正：没登录会被打回登录门。 */
+try {
+  if (localStorage.getItem('gate_hint') === '1') {
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  }
+} catch (e) {}
+</script>
+
 
   <!-- ========== 顶栏 ========== -->
   <div class="topbar">
@@ -1772,12 +1913,17 @@ async function checkOauth() {
       $('o-title').textContent = '暂未开放';
       $('o-out').style.display = 'none';
       $('o-desc').textContent = '知乎账号登录将在项目提报入口开放后接入（需 App ID / Key）';
+      gateShow(true);
+      $('gate-btn').textContent = '登录暂未开放';
+      $('gate-btn').disabled = true;
       return;
     }
     const me = await (await fetch('/api/oauth/me')).json();
     ZHIHU = me;
     renderTop();
     if (me.logged_in) {
+      gateShow(false);          // 已登录 → 直接进产品
+      try { localStorage.setItem('gate_hint', '1'); } catch (e) {}
       $('o-title').textContent = '已登录：' + (me.profile.fullname || '');
       $('o-desc').textContent = '你的分身会优先来自你自己的知乎创作';
       $('o-btn').style.display = 'none';
@@ -1791,11 +1937,48 @@ async function checkOauth() {
         openDrawer();
       }
     } else {
+      gateShow(true);            // 未登录 → 只给登录门
+      try { localStorage.removeItem('gate_hint'); } catch (e) {}
       $('o-btn').style.display = 'inline-block';
       $('o-out').style.display = 'none';
     }
   } catch (e) {}
 }
+/* ============================================================
+   登录门（v5 · 登录前置）
+   ============================================================ */
+let _gateOn = null;
+function gateShow(on) {
+  if (_gateOn === on) return;
+  _gateOn = on;
+  document.getElementById('gate').style.display = on ? 'block' : 'none';
+  document.getElementById('app').style.display = on ? 'none' : 'block';
+  if (on) window.scrollTo({ top: 0 });
+}
+function toggleSample() {
+  const el = document.getElementById('gate-sample');
+  const open = el.style.display === 'none';
+  el.style.display = open ? 'block' : 'none';
+  if (open) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+/** 三张牌：点开是「卡在喉咙里的话」；翻完把注意力推到登录按钮 */
+(function gateDeck() {
+  const deck = document.getElementById('gate-deck');
+  const hint = document.getElementById('gate-hint');
+  let n = 0;
+  deck.querySelectorAll('.gcard').forEach(c => {
+    c.onclick = () => {
+      if (c.classList.contains('flip')) return;
+      c.classList.add('flip'); n++;
+      if (n < 3) { hint.textContent = `还剩 ${3 - n} 张`; }
+      else {
+        hint.textContent = '要不要让人替你，说第一句？';
+        hint.classList.add('done');
+        document.getElementById('gate-btn').classList.add('pulse');
+      }
+    };
+  });
+})();
 async function zhihuLogin() {
   try {
     const d = await (await fetch('/api/oauth/url')).json();
