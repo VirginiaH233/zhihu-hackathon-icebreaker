@@ -62,6 +62,7 @@ SOUL_CACHE: dict[str, dict] = {}         # 昵称 -> {persona, library, name}（
 DATA = ROOT / "data"
 USERS_DIR = DATA / "users"     # 你的分身（持久，可编辑）
 SOULS_DIR = DATA / "souls"     # TA 的灵魂档案（缓存，可复用、可预热）
+HISTORY_DIR = DATA / "history" # 每个用户「聊过谁」（按 uid 归属，给个人抽屉的入口用）
 
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 SOULS_DIR.mkdir(parents=True, exist_ok=True)
@@ -336,6 +337,7 @@ class ChatReq(BaseModel):
     session_id: str
     message: str
     topic: str = ""                  # 第四幕：这场聊天是由哪个话题起的头（可为空）
+    user_id: str = ""                # 记「聊过谁 / 最近聊什么」用
 
 
 @app.post("/api/candidates")
@@ -448,6 +450,7 @@ def api_chat(req: ChatReq):
         return {"ok": False, "error": "说点什么吧"}
 
     reply = agent.chat(req.message, topic=req.topic)
+    _record_history(req.user_id, agent.name, topic=req.topic)   # 让「我聊过的人」当天就有内容
     # ⚠️ 模型输出是两段（【依据】…/【回应】…）—— 必须拆开再给前端，
     # 否则界面上会原样显示「【依据】[12] 【回应】…」，很难看。
     from agent import _split_speech
@@ -458,11 +461,55 @@ def api_chat(req: ChatReq):
             "hits": hits, "round": len(agent.history)}
 
 
+# ==================== 我聊过谁（个人抽屉的入口）====================
+
+def _record_history(uid: str, name: str, signature: str = "", topic: str = "",
+                    comment: bool = False) -> None:
+    """记一条「我和谁聊过」。没有 uid 就不记 —— 没有身份，这条记录没处归属。
+
+    这里是**用户自己的使用记录**，不是 TA 的资料：只存名字/签名/时间/最后聊的话题。
+    """
+    if not uid or not name:
+        return
+    HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+    path = HISTORY_DIR / f"{_safe_key(uid)}.json"
+    rec = _load_json(path, None) or {"items": []}
+    items = rec.get("items") or []
+    now = int(time.time())
+    hit = next((x for x in items if x.get("name") == name), None)
+    if hit:
+        hit["ts"] = now
+        if signature:
+            hit["signature"] = signature
+        if topic:
+            hit["last_topic"] = topic
+        hit["visits"] = int(hit.get("visits") or 1) + 1
+        if comment:
+            hit["comments"] = int(hit.get("comments") or 0) + 1
+    else:
+        items.insert(0, {"name": name, "signature": signature, "ts": now,
+                         "last_topic": topic, "visits": 1,
+                         "comments": 1 if comment else 0})
+    items = sorted(items, key=lambda x: x.get("ts") or 0, reverse=True)[:30]   # 留最近 30 个
+    path.write_text(json.dumps({"user_id": uid, "items": items}, ensure_ascii=False, indent=1),
+                    encoding="utf-8")
+
+
+@app.get("/api/history")
+def api_history(user_id: str):
+    """我聊过谁 —— 个人抽屉里那个入口读的就是它。"""
+    if not user_id:
+        return {"ok": True, "items": []}
+    rec = _load_json(HISTORY_DIR / f"{_safe_key(user_id)}.json", None)
+    return {"ok": True, "items": (rec or {}).get("items") or []}
+
+
 # ==================== 第四幕开局：TA 的分身先开口 + 双模块话题 ====================
 
 class OpenReq(BaseModel):
     session_id: str
     user_id: str = ""                # 有存档时才知道「你们的交集」，否则模块2 留空
+    signature: str = ""              # 作者签名：记「聊过谁」时要用（同名靠它区分）
 
 
 def _parse_opening(raw: str) -> dict:
@@ -529,6 +576,9 @@ def api_opening(req: OpenReq):
     from agent import build_opening_prompt
     raw = cli_answer(build_opening_prompt(ta, p, my_lib, my_state))
     got = _parse_opening(raw)
+
+    # 记一笔「我和 TA 聊过」—— 个人抽屉的入口靠它
+    _record_history(req.user_id, ta.name, req.signature)
 
     return {
         "ok": True,
@@ -622,6 +672,7 @@ def api_duel(req: DuelReq):
 
 class CommentReq(BaseModel):
     session_id: str
+    user_id: str = ""                # 记「聊过谁」用
     topic: str = ""
     dialogue: list = []              # 这场聊天（[{name, text}]）—— 只用来判断「他想问什么」
     n: int = 3
@@ -694,6 +745,8 @@ def api_comment(req: CommentReq):
         f"【这个用户刚聊过的话题】{req.topic or '（没指定）'}\n\n"
         f"【刚刚这场对话（只用来判断他想问什么，绝不能当 TA 说过的话）】\n{convo or '（没聊几句）'}"
     )
+
+    _record_history(req.user_id, ta.name, topic=req.topic, comment=True)
 
     items = _parse_comments(raw)
     by_idx = {i: d for i, d in cands}

@@ -444,7 +444,37 @@ button.wide { width: 100%; }
 }
 .pop.show { display: block; animation: rise .3s both; }
 
-.thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--sub); padding: 8px 0; }
+.thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--sub); padding: 8px 0; flex-wrap: wrap; }
+.thinking .t { color: var(--ink-soft); font-weight: 600; }
+.thinking .h { font-size: 12.5px; color: var(--sub); }
+.thinking .h.in { animation: hintIn .45s ease both; }
+@keyframes hintIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* 正在聊的话题：钉在输入框上方，折叠话题面板后也不会忘 */
+.topic-now { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 16px; padding: 10px 13px; background: var(--brand-soft);
+  border: 1px solid var(--line); border-left: 4px solid var(--brand);
+  border-radius: var(--r-sm); font-size: 13px; color: var(--ink-soft); }
+.topic-now b { color: var(--brand-deep); font-weight: 700; }
+.topic-now .chg { margin-left: auto; font-size: 12px; color: var(--brand);
+  cursor: pointer; border-bottom: 1px dashed var(--line-strong); white-space: nowrap; }
+.topic-now .chg:hover { border-bottom-color: var(--brand); }
+
+/* 抽屉：我聊过的人 */
+.dsec { margin: 16px 0 6px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.dsec-h { font-size: 12.5px; font-weight: 700; color: var(--brand); letter-spacing: .03em; margin-bottom: 10px; }
+.hitem { background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  padding: 11px 13px; margin-bottom: 8px; }
+.hitem .hm { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.hitem .hm b { font-size: 13.5px; }
+.hitem .hm span { font-size: 11px; color: var(--sub); white-space: nowrap; }
+.hitem .ht { font-size: 11.5px; color: var(--sub); margin-top: 4px; line-height: 1.7; }
+.hitem button { margin-top: 8px; font-size: 12px; padding: 6px 12px; }
+
+/* 反馈入口 */
+.feed { display: inline-block; margin-top: 12px; font-size: 12.5px; color: var(--brand);
+  text-decoration: none; border-bottom: 1px dashed var(--line-strong); }
+.feed:hover { border-bottom-color: var(--brand); }
 .thinking .d { width: 5px; height: 5px; border-radius: 50%; background: var(--brand); animation: pulse 1.4s infinite; }
 .thinking .d:nth-child(2) { animation-delay: .18s; }
 .thinking .d:nth-child(3) { animation-delay: .36s; }
@@ -885,6 +915,10 @@ try {
     <!-- 双模块话题（TA 先开口之后才摆出来） -->
     <div id="talk-topics" class="talk-topics"></div>
 
+    <div class="topic-now" id="talk-now" style="display:none">
+      正在聊：<b id="talk-now-t"></b><span class="chg" onclick="moreTopics()">换一个</span>
+    </div>
+
     <div class="talk-input">
       <input id="talk-msg" placeholder="说你想说的…（Enter 发送）"
              onkeydown="if(event.key==='Enter'){event.preventDefault();sendTalk();}">
@@ -934,6 +968,8 @@ try {
   <div class="foot">
     <div>社恐破冰船 · 盐之有理</div>
     <div class="q" style="margin-top:6px">分身基于公开内容构建，不代表本人想法 · 我们做连接，不做评价</div>
+    <a class="feed" href="https://www.zhihu.com/hackathon/project/120040?activity_code=zhihu_hackathon_2026_p2"
+       target="_blank" rel="noopener">用得不顺手？去项目页评论区说两句 →</a>
   </div>
 </div>
 
@@ -1016,6 +1052,14 @@ try {
         <button class="ghost" onclick="useKey()">进入</button>
       </div>
       <div class="hint" id="key-hint">钥匙长这样：<code style="font-size:11.5px">u + 一串字符</code>。谁拿到它谁就是你——所以别发到群里。</div>
+
+      <div class="dsec">
+        <div class="dsec-h">我聊过的人</div>
+        <div id="d-history"><div class="hint">读取中…</div></div>
+      </div>
+
+      <a class="feed" href="https://www.zhihu.com/hackathon/project/120040?activity_code=zhihu_hackathon_2026_p2"
+         target="_blank" rel="noopener" style="display:block; margin:14px 0 4px">有想法？去项目页评论区说两句 →</a>
     </div>
 
     <!-- OAuth -->
@@ -1046,7 +1090,7 @@ try {
 
 <script>
 const $ = id => document.getElementById(id);
-let sid = null, taName = '', myName = '我', introText = '', dialogue = [];
+let sid = null, taName = '', taSig = '', myName = '我', introText = '', dialogue = [];
 let taMode = 'soul';      // soul=TA 有真材料（做分身对谈）；profile=素材太薄（改出匹配卡）
 let taTooThin = false;    // 薄到读不出关注点 → 请用户补一句「我了解的 TA」
 const STORE = {};
@@ -1197,13 +1241,17 @@ async function makeMatch() {
   const b = $('btn-duel');
   const old = b.textContent;
   b.disabled = true; b.textContent = '正在比对你们的关注…';
+  $('stage-match').classList.remove('hidden');
+  $('stage-match').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const busyM = showBusy('match-rendered', 'match', '正在比对');
   try {
     const noteEl = $('ta-note');
     const d = await jpost('/api/match', {
       session_id: sid, user_id: uid,
       ta_note: (noteEl && noteEl.value ? noteEl.value : '').trim(),
     });
-    if (!d.ok) { toast(d.error || '没做成，再试一次', 3800); return; }
+    busyM.stop();
+    if (!d.ok) { toast(d.error || '没做成，再试一次', 3800); $('match-rendered').innerHTML = ''; return; }
     const why = [];
     if (taMode === 'profile') why.push(`TA「${esc(d.ta_name)}」的公开创作太少（只读到 ${d.ta_count} 条）`);
     if (ME && ME.mode === 'profile') why.push(`你自己的公开创作也不多（${ME.count || 0} 条）`);
@@ -1218,8 +1266,13 @@ async function makeMatch() {
 
 async function loadByCand(name, signature) {
   $('cand-list').innerHTML = '';
+  taSig = signature || '';
   $('stage-loading').style.display = 'block';
-  ['stage-ta', 'stage-duel', 'stage-card', 'stage-match'].forEach(i => $(i).classList.add('hidden'));
+  // ⚠️ stage-talk 也要一起收起来：从「我聊过的人」再进一个人时，
+  //    上一场的聊天记录还留在页面上，看着像没换人
+  ['stage-ta', 'stage-talk', 'stage-duel', 'stage-card', 'stage-match']
+    .forEach(i => $(i).classList.add('hidden'));
+  if ($('talk-now')) $('talk-now').style.display = 'none';
   $('duel-log').innerHTML = ''; dialogue = [];
   const box = $('loading-lines'); box.innerHTML = '';
   // 错峰靠 addLine 的动画延迟，不要用 setTimeout：
@@ -1353,7 +1406,7 @@ async function startDuel() {
 
   try { await jpost('/api/me', { user_id: uid, name: myName, intro: introText }); } catch (e) {}
 
-  let thinking = showThinking(taName + ' 的分身');
+  let thinking = showThinking('两个分身正在认识彼此…', 'duel-log', 'duel');
   try {
     const resp = await fetch('/api/duel', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1387,7 +1440,7 @@ async function startDuel() {
           if (thinking) { thinking.remove(); thinking = null; }
           dialogue.push({ name: ev.name, text: ev.text, key: ev.key });
           addMsg(ev.key === 'a' ? 'ta' : 'me', ev.text, ev.evidence, ev.name);
-          thinking = showThinking((ev.key === 'a' ? myName : taName) + ' 的分身');
+          thinking = showThinking('正在想下一句…', 'duel-log', 'duel');
         } else if (ev.type === 'done') {
           if (thinking) { thinking.remove(); thinking = null; }
           addMsg('sys', `对话结束 · 共 ${ev.count} 条`);
@@ -1408,13 +1461,45 @@ async function startDuel() {
   }
 }
 
-function showThinking(who, box = 'duel-log') {
+/** 每个「要等」的地方说什么 —— 等待也要有文字，而且要动态换，别让人以为卡死了 */
+const BUSY_HINTS = {
+  opening: ['正在读 TA 写过的那些东西…', '在想 TA 最近真正琢磨的是什么…', '顺手挑几个你们能聊的话题…'],
+  talk:    ['它在自己的资料库里翻东西…', '在想怎么接你这句话…', '掂量要不要反问你一句…'],
+  duel:    ['两个分身刚碰面，还在互相打量…', '各自在自己的资料里翻东西…', '试着找对方话里的破绽…', '越聊越具体了…'],
+  comment: ['在 TA 写过的内容里找能接的话…', '尽量不夸、只说人话…', '挑一句最不容易尴尬的开场…'],
+  card:    ['把刚才那几句来回读一遍…', '试着说清 TA 是个什么样的人…', '再挑两个你可能没想到的点…'],
+  match:   ['把两边关注的东西摆在一起…', '找重合的地方…', '想两句不尬的开场白…'],
+  search:  ['在知乎上翻…', '按作者名筛一遍…', '快到候选了…'],
+};
+
+function showThinking(who, box = 'duel-log', kind = '') {
   const el = document.createElement('div');
   el.className = 'thinking';
-  el.innerHTML = '<span class="d"></span><span class="d"></span><span class="d"></span><span>' + esc(who) + ' 正在想…</span>';
+  const hints = BUSY_HINTS[kind] || [];
+  el.innerHTML = '<span class="d"></span><span class="d"></span><span class="d"></span>'
+    + '<span class="t">' + esc(who) + (hints.length ? '' : ' 正在想…') + '</span>'
+    + (hints.length ? '<span class="h in">' + esc(hints[0]) + '</span>' : '');
   document.getElementById(box).appendChild(el);
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // 每 2.6 秒换一句「现在在做什么」
+  if (hints.length > 1) {
+    let i = 0;
+    const hEl = el.querySelector('.h');
+    el.__timer = setInterval(() => {
+      i = (i + 1) % hints.length;
+      hEl.textContent = hints[i];
+      hEl.classList.remove('in'); void hEl.offsetWidth; hEl.classList.add('in');
+    }, 2600);
+    const _rm = el.remove.bind(el);
+    el.remove = () => { clearInterval(el.__timer); _rm(); };   // 别留定时器
+  }
   return el;
+}
+
+/** 往指定容器里放一个「正在忙」块（返回 {stop}）—— 给卡片/评论这类非聊天的地方用 */
+function showBusy(boxId, kind, label) {
+  const el = showThinking(label || '正在忙', boxId, kind);
+  return { stop: () => el.remove() };
 }
 
 function addMsg(who, text, evidence = '', name = '', box = 'duel-log') {
@@ -1492,9 +1577,9 @@ async function startTalk() {
 
 /** 要一次开局（TA 先开口 + 两组话题）。解锁档案后也会再调一次。 */
 async function loadOpening() {
-  const t = showThinking(taName + ' 的分身', 'talk-log');
+  const t = showThinking(taName + ' 的分身 正在准备开口…', 'talk-log', 'opening');
   try {
-    const d = await jpost('/api/opening', { session_id: sid, user_id: uid });
+    const d = await jpost('/api/opening', { session_id: sid, user_id: uid, signature: taSig });
     if (t) t.remove();
     if (!d.ok) { addMsg('sys', '（' + (d.error || '没能开口') + '）', '', '', 'talk-log'); return; }
     openData = d;
@@ -1568,24 +1653,39 @@ function renderTopics(mods) {
   // 「我自己写」永远在最后 —— 给「本来就想问点什么」的人留出口
   const own = document.createElement('div');
   own.className = 'tk-mod';
-  own.innerHTML = '<div class="tk-lb">都不是你想聊的？</div>';
+  own.innerHTML = '<div class="tk-lb">都不是你想聊的？<span>直接写你想问的，写完就发出去</span></div>';
   const row = document.createElement('div');
   row.className = 'tk-own';
   const inp = document.createElement('input');
-  inp.placeholder = '我自己写一个话题…';
+  inp.placeholder = '比如：你当年是怎么下决心的？';
   const go = document.createElement('button');
   go.className = 'ghost';
-  go.textContent = '就聊这个';
-  go.onclick = () => { const v = inp.value.trim(); if (!v) { toast('先写一个话题'); return; } pickTopic(v); };
+  go.textContent = '就聊这个 →';
+  // 这句话本身就是话题、也是第一句发言 —— 不用写完话题再打一遍
+  go.onclick = () => {
+    const v = inp.value.trim();
+    if (!v) { toast('写一句你想问的'); return; }
+    setTopicNow(v);
+    $('talk-topics').innerHTML = '';
+    $('talk-msg').value = v;
+    sendTalk();
+  };
   inp.onkeydown = e => { if (e.key === 'Enter') go.onclick(); };
   row.appendChild(inp); row.appendChild(go);
   own.appendChild(row);
   box.appendChild(own);
 }
 
+/** 把当前话题钉在界面上 —— 话题面板会收起来，但不该让人忘了自己在聊什么 */
+function setTopicNow(t) {
+  curTopic = t;
+  if (!usedTopics.includes(t)) usedTopics.push(t);
+  $('talk-now-t').textContent = t;
+  $('talk-now').style.display = 'flex';
+}
+
 function pickTopic(text) {
-  curTopic = text;
-  if (!usedTopics.includes(text)) usedTopics.push(text);
+  setTopicNow(text);
   if (!shownTopics.includes(text)) shownTopics.push(text);
   $('talk-topics').innerHTML = '';
   toast('聊「' + text + '」—— 说你想说的就行', 2800);
@@ -1599,9 +1699,9 @@ async function sendTalk() {
   const b = $('btn-talk-send');
   inp.value = ''; b.disabled = true;
   addMsg('me', v, '', '你', 'talk-log');
-  const t = showThinking(taName + ' 的分身', 'talk-log');
+  const t = showThinking(taName + ' 的分身 正在想…', 'talk-log', 'talk');
   try {
-    const d = await jpost('/api/chat', { session_id: sid, message: v, topic: curTopic });
+    const d = await jpost('/api/chat', { session_id: sid, user_id: uid, message: v, topic: curTopic });
     if (t) t.remove();
     if (!d.ok) { addMsg('sys', '（' + (d.error || '没回上，再说一次？') + '）', '', '', 'talk-log'); return; }
     // 依据优先用模型自己写的（接口已拆好）；没有才退回检索命中
@@ -1676,12 +1776,14 @@ function finishTalkToComment() {
 
 async function makeComment(topic) {
   const box = $('talk-topics');
-  box.innerHTML = '<div class="tk-lb">正在写…<span>只引 TA 公开写过的内容，每条都挂着出处</span></div>';
+  box.innerHTML = '<div class="tk-lb">正在写评论<span>只引 TA 公开写过的内容，每条都挂着出处</span></div>';
+  const busy = showBusy('talk-topics', 'comment', '正在写');
   try {
-    const d = await jpost('/api/comment', { session_id: sid, topic, dialogue });
+    const d = await jpost('/api/comment', { session_id: sid, user_id: uid, topic, dialogue });
+    busy.stop();
     if (!d.ok) { toast(d.error || '没写出来，再试一次', 3800); finishTalkToComment(); return; }
     renderComments(d, topic);
-  } catch (e) { toast('出错：' + e.message); finishTalkToComment(); }
+  } catch (e) { busy.stop(); toast('出错：' + e.message); finishTalkToComment(); }
 }
 
 function renderComments(d, topic) {
@@ -1760,9 +1862,14 @@ function renderComments(d, topic) {
 async function makeCard() {
   const b = $('btn-ice');
   b.disabled = true; b.textContent = '正在写……';
+  // 先把卡片区亮出来，里面放「正在写什么」——别让人对着不动的按钮干等
+  $('stage-card').classList.remove('hidden');
+  $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const busy = showBusy('ice-card', 'card', '正在写这张卡');
   try {
     const d = await jpost('/api/icebreak', { session_id: sid, intro: introText, dialogue });
-    if (!d.ok) { toast(d.error); return; }
+    busy.stop();
+    if (!d.ok) { toast(d.error); $('ice-card').innerHTML = '<div class="hint">没写出来：' + esc(d.error || '再试一次') + '</div>'; return; }
     renderIce(d.card, d.ta_name || taName);
     $('stage-card').classList.remove('hidden');
     $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2038,7 +2145,38 @@ function againOne() {
 /* ============================================================
    个人中心
    ============================================================ */
-function openDrawer() { dismissMeBubble(); $('drawer').classList.add('show'); $('overlay').classList.add('show'); loadMe(); }
+function openDrawer() { dismissMeBubble(); $('drawer').classList.add('show'); $('overlay').classList.add('show'); loadMe(); loadHistory(); }
+
+/** 我聊过谁（按你的分身钥匙归属）。点一条就重新进那个人。 */
+async function loadHistory() {
+  const box = $('d-history');
+  if (!box) return;
+  try {
+    const d = await (await fetch('/api/history?user_id=' + encodeURIComponent(uid))).json();
+    const items = d.items || [];
+    if (!items.length) {
+      box.innerHTML = '<div class="hint">还没有。认识一个人、跟 TA 的分身聊过之后，这里会留一条。</div>';
+      return;
+    }
+    box.innerHTML = '';
+    items.forEach(it => {
+      const row = document.createElement('div');
+      row.className = 'hitem';
+      const day = new Date((it.ts || 0) * 1000);
+      const when = (Date.now() / 1000 - (it.ts || 0)) < 86400
+        ? '今天' : (day.getMonth() + 1) + '/' + day.getDate();
+      row.innerHTML = '<div class="hm"><b>' + esc(it.name) + '</b><span>' + when + '</span></div>'
+        + (it.last_topic ? '<div class="ht">最近聊：' + esc(String(it.last_topic).slice(0, 42)) + '</div>' : '')
+        + (it.comments ? '<div class="ht">拿到过 ' + it.comments + ' 条能发的评论</div>' : '');
+      const b = document.createElement('button');
+      b.className = 'ghost';
+      b.textContent = '再聊一次';
+      b.onclick = () => { closeDrawer(); loadByCand(it.name, it.signature || ''); };
+      row.appendChild(b);
+      box.appendChild(row);
+    });
+  } catch (e) { box.innerHTML = '<div class="hint">读不到记录，稍后再试</div>'; }
+}
 function closeDrawer() { $('drawer').classList.remove('show'); $('overlay').classList.remove('show'); }
 
 /** 顶栏身份的**唯一**渲染入口（别在其他地方直接写 top-name / top-av）。
