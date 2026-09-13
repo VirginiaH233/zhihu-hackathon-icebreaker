@@ -1,4 +1,9 @@
-"""生成项目 ICON（正方形 512）与封面图（16:9 1600x900）—— 清晨海面视觉"""
+"""生成项目 ICON（512）。
+
+⚠️ 封面已换：正式封面 assets/cover-16x9.png 由 make_cover_v3.py 生成
+   （登录页风格：夜色海面 + 三张冰牌）。本脚本的封面已停用，
+   只输出 cover-16x9-旧版画舫.png，避免把线上封面覆盖掉。
+"""
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -187,5 +192,5 @@ d.line([(120, 600), (520, 600)], fill=(212, 228, 240), width=3)
 d.text((118, 626), "分身先替你去见 TA，", font=f_small, fill=(140, 160, 178))
 d.text((118, 664), "你再看要不要真的开口。", font=f_small, fill=(140, 160, 178))
 
-cov.save(str(ASSETS / "cover-16x9.png"))
-print("✅ 封面   1600x900 → assets/cover-16x9.png")
+cov.save(str(ASSETS / "cover-16x9-旧版画舫.png"))
+print("⚠️  旧版封面 1600x900 → assets/cover-16x9-旧版画舫.png（正式封面请跑 make_cover_v3.py）")
