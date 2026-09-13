@@ -597,6 +597,60 @@ button.wide { width: 100%; }
   transition: opacity .28s, transform .28s; z-index: 100; box-shadow: var(--sh-2);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- 幕 4：你和 TA 的分身 ---------- */
+.talkhead { font-size: 13px; color: var(--sub); line-height: 1.85; margin: 2px 0 14px; }
+.talkhead b { color: var(--ink-soft); }
+.talk-log { margin-top: 4px; }
+.talk-input { display: flex; gap: 10px; margin-top: 16px; }
+.talk-input input { flex: 1; padding: 13px 15px; font-size: 15px; font-family: inherit;
+  border: 1.5px solid var(--line-strong); border-radius: var(--r); background: var(--card); color: var(--ink); }
+.talk-input input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.talk-wheel { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+.talk-wheel button { font-size: 13.5px; padding: 10px 16px; }
+
+.talk-topics { margin-top: 18px; border-top: 1px solid var(--line-soft); padding-top: 16px; }
+.tk-mod { margin-bottom: 16px; }
+.tk-lb { font-size: 12.5px; font-weight: 700; color: var(--brand); letter-spacing: .03em; margin-bottom: 9px; }
+.tk-lb span { font-weight: 500; color: var(--sub); margin-left: 6px; }
+.tk-chip { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: var(--r);
+  padding: 12px 14px; margin-bottom: 8px; cursor: pointer; font: inherit; font-size: 14px;
+  color: var(--ink); transition: border-color .18s, background .18s, transform .12s; }
+.tk-chip:hover { border-color: var(--brand); background: var(--brand-soft); transform: translateX(2px); }
+.tk-chip > span:first-child { flex: 1; }
+.tk-chip .rec { font-size: 11px; font-weight: 700; color: #A96C15;
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 999px;
+  padding: 2px 8px; white-space: nowrap; }
+.tk-chip .n { font-size: 11.5px; color: var(--sub); white-space: nowrap; }
+.tk-locked { background: var(--accent-soft); border: 1.5px dashed var(--accent-line);
+  border-radius: var(--r); padding: 16px; }
+.tk-locked .t { font-size: 13.5px; line-height: 1.9; color: var(--ink); margin-bottom: 12px; }
+.tk-locked .t b { color: #A96C15; }
+.tk-own { display: flex; gap: 8px; }
+.tk-own input { flex: 1; padding: 11px 13px; font-size: 13.5px; font-family: inherit;
+  border: 1.5px solid var(--line-strong); border-radius: var(--r); background: var(--card); color: var(--ink); }
+.tk-own input:focus { outline: none; border-color: var(--brand); }
+
+/* 评论卡（第四幕的产出） */
+.cm-card { background: var(--card); border: 1.5px solid var(--line); border-radius: var(--r);
+  padding: 15px 16px; margin-bottom: 10px; box-shadow: var(--sh-1); }
+.cm-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; flex-wrap: wrap; }
+.cm-kind { font-size: 11px; font-weight: 700; color: var(--brand); background: var(--brand-soft);
+  border-radius: 999px; padding: 3px 9px; }
+.cm-src { font-size: 11.5px; color: var(--sub); }
+.cm-text { font-size: 14.5px; line-height: 1.85; color: var(--ink); white-space: pre-wrap; }
+.cm-acts { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.cm-acts button { font-size: 13px; padding: 9px 14px; }
+.cm-link { font-size: 12.5px; color: var(--brand); text-decoration: none;
+  border-bottom: 1px dashed var(--line-strong); }
+.cm-link:hover { border-bottom-color: var(--brand); }
+
+/* 彩蛋：两个分身自己聊一场 */
+.egg { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--line-strong); }
+.egg-t { font-size: 13px; line-height: 1.9; color: var(--sub); margin-bottom: 12px; }
+.egg-t b { color: var(--ink); }
+.egg-t span { font-size: 12.5px; }
 /* ============================================================
    登录门（v5 · 登录前置）
    颜色一律用产品自己的「清晨海面」变量，不另起一套
@@ -724,7 +778,7 @@ try {
     <div class="howto">
       <div class="hi"><span class="n">1</span><span>输入一个你想认识的知乎答主</span></div>
       <div class="hi"><span class="n">2</span><span>我们读 TA 的公开创作，生成 TA 的数字分身</span></div>
-      <div class="hi"><span class="n">3</span><span>让你的分身替你先聊一场 → 拿到一张破冰卡</span></div>
+      <div class="hi"><span class="n">3</span><span>让 TA 的分身先跟你聊两句 → 拿到一句能直接发出去的话</span></div>
     </div>
 
     <div class="row">
@@ -821,7 +875,30 @@ try {
 
   </div>
 
-  <!-- ========== 幕 4：两个分身相遇 ========== -->
+  <!-- ========== 幕 4：真人 × TA 的分身（v5 主角） ========== -->
+  <div class="card hidden" id="stage-talk">
+    <span class="step green">你和 TA 的分身</span>
+    <div class="talkhead" id="talk-head"></div>
+
+    <div id="talk-log" class="talk-log"></div>
+
+    <!-- 双模块话题（TA 先开口之后才摆出来） -->
+    <div id="talk-topics" class="talk-topics"></div>
+
+    <div class="talk-input">
+      <input id="talk-msg" placeholder="说你想说的…（Enter 发送）"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();sendTalk();}">
+      <button id="btn-talk-send" onclick="sendTalk()">发</button>
+    </div>
+
+    <!-- 常驻方向盘 -->
+    <div class="talk-wheel" id="talk-wheel" style="display:none">
+      <button class="ghost" onclick="moreTopics()">我还想聊聊别的</button>
+      <button class="ghost" onclick="finishTalk()">我聊完了</button>
+    </div>
+  </div>
+
+  <!-- ========== 幕 4b：两个分身相遇（v5 降为彩蛋，放在最后） ========== -->
   <div class="card hidden" id="stage-duel">
     <span class="step green">两个分身正在聊</span>
     <div class="duelhead">
@@ -830,13 +907,13 @@ try {
     </div>
     <div id="duel-log"></div>
     <div id="duel-actions" class="center" style="margin-top:24px; display:none">
-      <button class="accent" id="btn-ice" onclick="makeCard()">这场对话告诉了我什么？</button>
+      <button class="accent" id="btn-ice" onclick="makeCard()">他们聊出了什么？</button>
     </div>
   </div>
 
   <!-- ========== 幕 5：破冰卡 ========== -->
   <div class="card hidden" id="stage-card">
-    <span class="step warm">你的破冰卡</span>
+    <span class="step warm">他们聊出来的</span>
     <div class="icewrap"><div class="ice" id="ice-card"></div></div>
     <div class="center" style="margin-top:20px">
       <button class="accent" onclick="exportCard()">保存成图片</button>
@@ -1110,8 +1187,8 @@ function refreshNextBtn() {
     b.textContent = '生成兴趣匹配卡';
     b.onclick = makeMatch;
   } else {
-    b.textContent = '让两个分身见一面';
-    b.onclick = startDuel;
+    b.textContent = '让 TA 的分身先跟你聊';
+    b.onclick = startTalk;
   }
 }
 
@@ -1331,23 +1408,26 @@ async function startDuel() {
   }
 }
 
-function showThinking(who) {
+function showThinking(who, box = 'duel-log') {
   const el = document.createElement('div');
   el.className = 'thinking';
   el.innerHTML = '<span class="d"></span><span class="d"></span><span class="d"></span><span>' + esc(who) + ' 正在想…</span>';
-  $('duel-log').appendChild(el);
+  document.getElementById(box).appendChild(el);
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   return el;
 }
 
-function addMsg(who, text, evidence = '', name = '') {
+function addMsg(who, text, evidence = '', name = '', box = 'duel-log') {
   const wrap = document.createElement('div');
   wrap.className = 'msg ' + who;
   if (who !== 'sys') {
     const initial = (name || '?').slice(0, 1);
     const label = document.createElement('div');
     label.className = 'who';
-    label.innerHTML = `<span class="av">${esc(initial)}</span>${esc((name || '') + ' 的分身')}`;
+    // name === '你' → 真人本人说的话，不写「X 的分身」
+    label.innerHTML = name === '你'
+      ? `<span class="av">我</span>你`
+      : `<span class="av">${esc(initial)}</span>${esc((name || '') + ' 的分身')}`;
     wrap.appendChild(label);
   }
   const bub = document.createElement('div');
@@ -1381,9 +1461,297 @@ function addMsg(who, text, evidence = '', name = '') {
     }
     wrap.appendChild(basis);
   }
-  $('duel-log').appendChild(wrap);
+  document.getElementById(box).appendChild(wrap);
   wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   return wrap;
+}
+
+/* ============================================================
+   幕 4：真人 × TA 的分身（v5 主角）
+   TA 的分身先开口 → 摆出两组话题 → 用户挑一个开始聊
+   常驻方向盘：我还想聊聊别的 / 我聊完了
+   ============================================================ */
+let curTopic = '';       // 这场聊天是由哪个话题起的头
+let openData = null;     // /api/opening 的原始结果（含两组话题）
+let shownTopics = [];    // 已经摆出来过的话题（「我还想聊聊别的」不重复摆）
+let usedTopics = [];     // 用户真正聊过的话题
+let talkRounds = 0;      // 用户发了几条
+
+async function startTalk() {
+  $('btn-duel').disabled = true;
+  $('stage-talk').classList.remove('hidden');
+  $('talk-log').innerHTML = '';
+  $('talk-topics').innerHTML = '';
+  $('talk-wheel').style.display = 'none';
+  dialogue = []; talkRounds = 0; curTopic = '';
+  openData = null; shownTopics = []; usedTopics = [];
+  $('stage-talk').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  await loadOpening();
+  $('btn-duel').disabled = false;
+}
+
+/** 要一次开局（TA 先开口 + 两组话题）。解锁档案后也会再调一次。 */
+async function loadOpening() {
+  const t = showThinking(taName + ' 的分身', 'talk-log');
+  try {
+    const d = await jpost('/api/opening', { session_id: sid, user_id: uid });
+    if (t) t.remove();
+    if (!d.ok) { addMsg('sys', '（' + (d.error || '没能开口') + '）', '', '', 'talk-log'); return; }
+    openData = d;
+    if (d.opening && !$('talk-log').childElementCount) {
+      addMsg('ta', d.opening, '', d.ta_name || taName, 'talk-log');
+    }
+    $('talk-head').innerHTML = `TA（「${esc(taName)}」）的分身先开口。它<b>只看得见你说的话</b>，` +
+      `看不见你的资料、经历、底细 —— 和你跟真人聊天时的处境一样。`;
+    renderTopics(d.modules || []);
+    $('talk-wheel').style.display = 'flex';
+  } catch (e) {
+    if (t) t.remove();
+    addMsg('sys', '（出错：' + e.message + '）', '', '', 'talk-log');
+  }
+}
+
+function _topicChip(tp) {
+  const btn = document.createElement('button');
+  btn.className = 'tk-chip';
+  const refs = tp.refs || [];
+  const titles = refs.map(i => (STORE[i] && STORE[i].t) || '').filter(Boolean);
+  btn.innerHTML = `<span>${esc(tp.text)}</span>` +
+    (tp.recommend ? '<span class="rec">推荐</span>' : '') +
+    (refs.length ? `<span class="n" title="${esc(titles.join(' / '))}">${refs.length} 篇</span>` : '');
+  btn.onclick = () => pickTopic(tp.text);
+  return btn;
+}
+
+function renderTopics(mods) {
+  const box = $('talk-topics');
+  box.innerHTML = '';
+  (mods || []).forEach(m => {
+    const sec = document.createElement('div');
+    sec.className = 'tk-mod';
+    const fresh = (m.topics || []).filter(tp => !shownTopics.includes(tp.text));
+    // 一次只摆 3 个 —— 剩下的留给「我还想聊聊别的」，别一次砸一脸
+    const rest = fresh.slice(0, 3);
+    rest.forEach(tp => shownTopics.push(tp.text));
+    const hd = document.createElement('div');
+    hd.className = 'tk-lb';
+    hd.innerHTML = esc(m.label) + (m.locked ? '' :
+      `<span>${fresh.length - rest.length > 0 ? '还有 ' + (fresh.length - rest.length) + ' 个' : '都看过了'}</span>`);
+    sec.appendChild(hd);
+
+    if (m.locked) {
+      // 锁态：醒目但不打断（用户按了才生成他的档案 —— 不静默生成）
+      const card = document.createElement('div');
+      card.className = 'tk-locked';
+      card.innerHTML = `<div class="t">这一组得<b>先有你自己的档案</b>才算得出来 ——` +
+        `「你们可能都感兴趣的」得先知道你都写过什么。<br>` +
+        `点一下，我们就读你在知乎的<b>公开创作</b>（只读公开内容，不碰私信、不碰关注列表）。</div>`;
+      const b = document.createElement('button');
+      b.className = 'accent';
+      b.textContent = '读我的公开创作，解锁这一组';
+      b.onclick = unlockBoth;
+      card.appendChild(b);
+      sec.appendChild(card);
+    } else if (!fresh.length) {
+      const note = document.createElement('div');
+      note.className = 'talkhead';
+      note.textContent = (m.topics && m.topics.length)
+        ? '这些你都聊过了。'
+        : '没找到你们重叠的领域 —— 共同话题少，反而更得挑个由头开口。';
+      sec.appendChild(note);
+    } else {
+      rest.forEach(tp => sec.appendChild(_topicChip(tp)));
+    }
+    box.appendChild(sec);
+  });
+
+  // 「我自己写」永远在最后 —— 给「本来就想问点什么」的人留出口
+  const own = document.createElement('div');
+  own.className = 'tk-mod';
+  own.innerHTML = '<div class="tk-lb">都不是你想聊的？</div>';
+  const row = document.createElement('div');
+  row.className = 'tk-own';
+  const inp = document.createElement('input');
+  inp.placeholder = '我自己写一个话题…';
+  const go = document.createElement('button');
+  go.className = 'ghost';
+  go.textContent = '就聊这个';
+  go.onclick = () => { const v = inp.value.trim(); if (!v) { toast('先写一个话题'); return; } pickTopic(v); };
+  inp.onkeydown = e => { if (e.key === 'Enter') go.onclick(); };
+  row.appendChild(inp); row.appendChild(go);
+  own.appendChild(row);
+  box.appendChild(own);
+}
+
+function pickTopic(text) {
+  curTopic = text;
+  if (!usedTopics.includes(text)) usedTopics.push(text);
+  if (!shownTopics.includes(text)) shownTopics.push(text);
+  $('talk-topics').innerHTML = '';
+  toast('聊「' + text + '」—— 说你想说的就行', 2800);
+  $('talk-msg').focus();
+}
+
+async function sendTalk() {
+  const inp = $('talk-msg');
+  const v = (inp.value || '').trim();
+  if (!v) return;
+  const b = $('btn-talk-send');
+  inp.value = ''; b.disabled = true;
+  addMsg('me', v, '', '你', 'talk-log');
+  const t = showThinking(taName + ' 的分身', 'talk-log');
+  try {
+    const d = await jpost('/api/chat', { session_id: sid, message: v, topic: curTopic });
+    if (t) t.remove();
+    if (!d.ok) { addMsg('sys', '（' + (d.error || '没回上，再说一次？') + '）', '', '', 'talk-log'); return; }
+    // 依据优先用模型自己写的（接口已拆好）；没有才退回检索命中
+    const ev = d.evidence || (d.hits || []).map(x => '[' + x.id + ']').join('、');
+    addMsg('ta', d.reply, ev, taName, 'talk-log');
+    talkRounds++;
+    if (talkRounds === 5) {
+      addMsg('sys', '聊得差不多了？点下面「我聊完了」，我帮你把想说的那句话整理出来。', '', '', 'talk-log');
+    }
+  } catch (e) {
+    if (t) t.remove();
+    addMsg('sys', '（出错：' + e.message + '）', '', '', 'talk-log');
+  } finally { b.disabled = false; inp.focus(); }
+}
+
+/** 我还想聊聊别的：先把没摆过的摆出来；都摆过了就再要一批 */
+async function moreTopics() {
+  if (!openData) { await loadOpening(); return; }
+  const before = shownTopics.length;
+  renderTopics(openData.modules || []);
+  const left = (openData.modules || []).some(m => !m.locked &&
+    (m.topics || []).some(tp => !shownTopics.includes(tp.text)));
+  if (!left) {
+    toast('再给你一批新话题…', 2200);
+    openData = null;
+    await loadOpening();
+  }
+  $('talk-topics').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/** 解锁模块 2：读用户自己的公开创作（要知乎授权；只在用户按了之后才做） */
+async function unlockBoth() {
+  const okToGo = await ensureZhihuLogin();
+  if (!okToGo) return;
+  toast('正在读你的公开创作…', 2500);
+  try {
+    const d = await jpost('/api/me', { user_id: uid, name: myNameFromZhihu(), intro: '' });
+    if (!d.ok) { toast(d.error || '没读成，稍后再试', 3800); return; }
+    toast(`好了 · 基于你在知乎的 ${d.count} 条创作`, 3000);
+    await loadMe();
+    openData = null;
+    await loadOpening();
+  } catch (e) { toast('出错：' + e.message); }
+}
+
+function finishTalk() {
+  if (!usedTopics.length && !talkRounds) { toast('先聊两句吧，一句话也行'); return; }
+  finishTalkToComment();
+}
+
+/** 挑一个最想接着说下去的话题 → 生成能直接发出去的评论 */
+function finishTalkToComment() {
+  const box = $('talk-topics');
+  box.innerHTML = '';
+  const sec = document.createElement('div');
+  sec.className = 'tk-mod';
+  const hd = document.createElement('div');
+  hd.className = 'tk-lb';
+  hd.innerHTML = '挑一个最想接着说下去的<span>我按这个给你写几条能直接发的评论</span>';
+  sec.appendChild(hd);
+  const list = usedTopics.length ? usedTopics : [curTopic || '刚刚聊的那些'];
+  list.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tk-chip';
+    b.innerHTML = `<span>${esc(t)}</span><span class="n">写评论 ›</span>`;
+    b.onclick = () => makeComment(t);
+    sec.appendChild(b);
+  });
+  box.appendChild(sec);
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function makeComment(topic) {
+  const box = $('talk-topics');
+  box.innerHTML = '<div class="tk-lb">正在写…<span>只引 TA 公开写过的内容，每条都挂着出处</span></div>';
+  try {
+    const d = await jpost('/api/comment', { session_id: sid, topic, dialogue });
+    if (!d.ok) { toast(d.error || '没写出来，再试一次', 3800); finishTalkToComment(); return; }
+    renderComments(d, topic);
+  } catch (e) { toast('出错：' + e.message); finishTalkToComment(); }
+}
+
+function renderComments(d, topic) {
+  const box = $('talk-topics');
+  box.innerHTML = '';
+  const hd = document.createElement('div');
+  hd.className = 'tk-lb';
+  hd.innerHTML = '能直接发出去的评论<span>挑一条 → 点复制 → 点原文去发</span>';
+  box.appendChild(hd);
+
+  (d.comments || []).forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'cm-card';
+    card.innerHTML =
+      `<div class="cm-top"><span class="cm-kind">${c.kind === 'c' ? '请教型' : '追问型'}</span>` +
+      `<span class="cm-src">针对《${esc(c.title)}》</span></div>` +
+      `<div class="cm-text">${esc(c.text)}</div>`;
+    const row = document.createElement('div');
+    row.className = 'cm-acts';
+    const cp = document.createElement('button');
+    cp.className = 'accent';
+    cp.textContent = '复制这句话';
+    cp.onclick = () => navigator.clipboard.writeText(c.text)
+      .then(() => { cp.textContent = '已复制 ✓'; toast('复制好了 · 去原文下发出去', 3200); })
+      .catch(() => toast('复制失败，手动选一下'));
+    row.appendChild(cp);
+    if (c.url) {
+      const a = document.createElement('a');
+      a.className = 'cm-link';
+      a.href = c.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = '打开原文去发 ↗';
+      row.appendChild(a);
+    }
+    card.appendChild(row);
+    box.appendChild(card);
+  });
+
+  const foot = document.createElement('div');
+  foot.className = 'tk-mod';
+  foot.style.marginTop = '14px';
+  const ab = document.createElement('button');
+  ab.className = 'ghost';
+  ab.textContent = '都不合适，再写两版';
+  ab.onclick = () => makeComment(topic);
+  foot.appendChild(ab);
+  box.appendChild(foot);
+
+  // 彩蛋：两个分身自己聊一场（赛道「Agent 与 Agent」那一环，放在最后别抢戏）
+  const egg = document.createElement('div');
+  egg.className = 'egg';
+  egg.innerHTML = `<div class="egg-t">还有一件事：<b>让两个分身自己聊一场？</b><br>` +
+    `<span>它们各自只知道自己的底细，只能靠几句话认识彼此 —— 你旁观就行。</span></div>`;
+  const eb = document.createElement('button');
+  eb.className = 'ghost';
+  eb.textContent = '看看两个分身会聊成什么样 →';
+  eb.onclick = () => {
+    // 两个分身对谈要两边都有料 —— 没有你的档案就打不起来，先说人话
+    if (!ME || !ME.persona) {
+      toast('这个彩蛋得先有你自己的档案（在上面那一栏按一下解锁）', 3600);
+      return;
+    }
+    const dlg = document.querySelector('#stage-duel');
+    dlg.classList.remove('hidden');
+    dlg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    startDuel();
+  };
+  egg.appendChild(eb);
+  box.appendChild(egg);
+
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 /* ============================================================
@@ -1399,7 +1767,7 @@ async function makeCard() {
     $('stage-card').classList.remove('hidden');
     $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) { toast('出错：' + e.message); }
-  finally { b.disabled = false; b.textContent = '这场对话告诉了我什么？'; }
+  finally { b.disabled = false; b.textContent = '他们聊出了什么？'; }
 }
 
 function pick(raw, title, next) {
@@ -1422,7 +1790,7 @@ function renderIce(raw, name) {
     <div class="ice-top">
       <div>
         <div class="ice-brand">社恐破冰船 · BREAKING ICE</div>
-        <div class="ice-title">${esc(name)} 的破冰卡</div>
+        <div class="ice-title">${esc(name)} 的分身 × 你的分身 · 旁观笔记</div>
       </div>
       <div class="ice-to">给你的第 1 句</div>
     </div>
@@ -1563,11 +1931,101 @@ function exportCard() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '破冰卡-' + d.name + '.png';
+    a.download = '旁观笔记-' + d.name + '.png';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 3000);
     toast('已保存 · 可以直接发给 TA 或存起来');
   }, 'image/png');
+}
+
+/* ────────────────────────────────────────────────────────────
+   分享卡（信笺）：先拼 SVG，再原生成图 —— 不用任何外部库。
+   ⚠️ 暂不上线（2026-09-13 决定）：这张卡的「给谁看」还没定 ——
+      评论是复制出去发给 TA 的，做成图给朋友看又缺上下文。
+      代码先留着，等视觉/受众打磨完再把「存成图片」按钮接回评论卡。
+   ────────────────────────────────────────────────────────────
+   拆成 _commentCardSVG() 是为了能单独验证（SVG 能否解析、文字会不会溢出）。 */
+function _commentCardSVG(c, author) {
+  const F = '"Microsoft YaHei","PingFang SC","Segoe UI",sans-serif';
+  const W = 900, H = 1200, PAD = 78, X = PAD + 14;
+  const INNER = W - X - PAD;
+  const mc = document.createElement('canvas').getContext('2d');
+  const wrap = (text, font, maxW) => {
+    mc.font = font;
+    const out = [];
+    String(text || '').split('\n').forEach(para => {
+      if (!para) { out.push(''); return; }
+      let line = '';
+      for (const ch of para) {
+        if (line && mc.measureText(line + ch).width > maxW) { out.push(line); line = ch; }
+        else line += ch;
+      }
+      out.push(line);
+    });
+    return out;
+  };
+  // 正文自适应：长了就缩字号，保证不压到下面的落款
+  const BAND_TOP = 250, BAND_BOTTOM = H - 238;
+  let fs = 44, LH = 88, lines = wrap(c.text, '600 44px ' + F, INNER);
+  while (fs > 26 && lines.length * LH > BAND_BOTTOM - BAND_TOP) {
+    fs -= 2; LH = Math.round(fs * 2.0);
+    lines = wrap(c.text, '600 ' + fs + 'px ' + F, INNER);
+  }
+  // 垂直居中：信笺的留白要匀，不能文字全挤在顶上、中间空一大片
+  const blockH = lines.length * LH;
+  const TEXT_TOP = Math.round(BAND_TOP + Math.max(0, (BAND_BOTTOM - BAND_TOP - blockH) / 2));
+  const esc2 = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const tspans = lines.map((l, i) =>
+    '<tspan x="' + X + '" y="' + (TEXT_TOP + i * LH) + '">' + esc2(l) + '</tspan>').join('');
+  const src = '针对 ' + esc2(author || taName) + ' 写过的《' + esc2(c.title) + '》';
+
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">'
+    + '<defs><linearGradient id="r" x1="0" y1="0" x2="0" y2="1">'
+    + '<stop offset="0" stop-color="#E8A33D"/><stop offset=".55" stop-color="#F6C97A"/>'
+    + '<stop offset="1" stop-color="#3E7CB1"/></linearGradient></defs>'
+    + '<rect width="' + W + '" height="' + H + '" fill="#FDFBF7"/>'
+    + '<rect x="0" y="0" width="14" height="' + H + '" fill="url(#r)"/>'
+    + '<text x="' + X + '" y="152" font-family=\'' + F + '\' font-size="25" font-weight="700" '
+    + 'fill="#B8863A" letter-spacing="9">我 想 说 的 一 句 话</text>'
+    + '<text font-family=\'' + F + '\' font-size="' + fs + '" font-weight="600" fill="#3A2A0C" '
+    + 'letter-spacing="0.4">' + tspans + '</text>'
+    + '<line x1="' + X + '" y1="' + (H - 198) + '" x2="' + (W - PAD) + '" y2="' + (H - 198) + '" '
+    + 'stroke="#F0D9B0" stroke-width="2" stroke-dasharray="9 9"/>'
+    + '<text x="' + X + '" y="' + (H - 150) + '" font-family=\'' + F + '\' font-size="27" '
+    + 'font-weight="600" fill="#B8863A">' + src + '</text>'
+    + '<text x="' + X + '" y="' + (H - 78) + '" font-family=\'' + F + '\' font-size="31" '
+    + 'font-weight="800" fill="#1F2D3D">社恐<tspan fill="#E8A33D">破冰船</tspan></text>'
+    + '<text x="' + X + '" y="' + (H - 36) + '" font-family=\'' + F + '\' font-size="21" '
+    + 'fill="#A98F63" letter-spacing="3">知乎黑客松 2026 · 盐之有理</text>'
+    + '<text x="' + (W - PAD) + '" y="' + (H - 78) + '" text-anchor="end" font-family=\'' + F + '\' '
+    + 'font-size="23" fill="#A98F63" letter-spacing="4">有多少话，卡在喉咙里？</text>'
+    + '</svg>';
+}
+
+function exportCommentCard(c) {
+  if (!c || !c.text) { toast('还没有评论'); return; }
+  const svg = _commentCardSVG(c, taName);
+  const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  const img = new Image();
+  img.onload = () => {
+    const cvs = document.createElement('canvas');
+    cvs.width = 900; cvs.height = 1200;
+    const ctx = cvs.getContext('2d');
+    ctx.fillStyle = '#FDFBF7'; ctx.fillRect(0, 0, 900, 1200);
+    ctx.drawImage(img, 0, 0);
+    cvs.toBlob(blob => {
+      const u = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = u;
+      a.download = '我想说的一句话.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(u), 3000);
+      toast('已存成图片 · 3:4，可以直接发');
+    }, 'image/png');
+  };
+  img.onerror = () => toast('生图失败，再点一次试试');
+  img.src = url;
 }
 
 function againOne() {
@@ -1865,6 +2323,10 @@ function useKey() {
    OAuth
    ============================================================ */
 async function checkOauth() {
+  // 本地开发豁免：本地 OAuth 回调指向线上，本机登录会跳走 → 本地直接放行产品。
+  // 只在 localhost / 127.0.0.1 生效，线上（任何真实域名）不受影响。
+  const _devLocal = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+  if (_devLocal) { gateShow(false); }
   try {
     const d = await (await fetch('/api/oauth/status')).json();
     if (!d.configured) {
@@ -1895,7 +2357,7 @@ async function checkOauth() {
         openDrawer();
       }
     } else {
-      gateShow(true);            // 未登录 → 只给登录门
+      if (!_devLocal) gateShow(true);   // 未登录 → 只给登录门（本地开发豁免）
       try { localStorage.removeItem('gate_hint'); } catch (e) {}
       $('o-btn').style.display = 'inline-block';
       $('o-out').style.display = 'none';

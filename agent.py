@@ -116,7 +116,7 @@ class SoulAgent:
         return f"{recent} {user_msg}"
 
     # ========== 循环 ②：Respond（基于检索结果回应） ==========
-    def _respond(self, user_msg: str, hits: list) -> str:
+    def _respond(self, user_msg: str, hits: list, topic: str = "") -> str:
         if hits:
             lib_text = "\n".join(f"[{idx}] 《{d['title']}》：{d['summary']}" for idx, d, _ in hits)
             allowed = "、".join(f"[{idx}]" for idx, _, _ in hits)
@@ -124,6 +124,8 @@ class SoulAgent:
             lib_text = "（检索无结果——资料库里没有相关内容）"
             allowed = "（无）"
         hist_text = "\n".join(f"用户：{u}\n分身：{a}" for u, a in self.history[-4:]) or "（这一轮是对话的开始）"
+        topic_block = (f"\n【你们在聊的话题】{topic}\n"
+                       f"（话题只是由头，不是要交的作业 —— 聊着聊着跑偏了也没关系）\n") if topic else ""
         prompt = f"""你是「{self.name}」的分身——基于 TA 公开内容构建的思维镜像，**不是 AI 助手**。
 
 【TA 的人格】
@@ -131,39 +133,51 @@ class SoulAgent:
 
 【检索到的资料】（内部参考，用户看不到）
 {lib_text}
-
+{topic_block}
 【对话历史】
 {hist_text}
 
 【用户的话】
 {user_msg}
 
-规则（违反任何一条都算失败）：
-1. **只能引用上面给出的编号**：{allowed}。**严禁编造不存在的编号。**
-2. 先从「检索到的资料」里找依据再回应，标【依据】[编号]。
-3. **严禁编造资料里没有的具体细节**——数字、实验结论、案例、人名，资料里没有就**不准写**。
-   不确定就说「这个细节我不确定」。
-4. 若检索无结果，**必须诚实说「TA 好像没写过这个」**，可以说「我只能猜 TA 大概会…」。
-5. 禁一切 AI 腔（禁「作为一个AI」「我很乐意」「希望对你有帮助」；禁列 1234 点）。
-6. 用 TA 的口吻，长度 1–3 句，保持 TA 的立场、不迎合。
-7. 不编造 TA 的具体经历；不假装知道 TA 的私生活。
-
-输出格式（两段）：
-【依据】…
-【回应】…"""
+{CHAT_RULES.format(allowed=allowed)}"""
         return self._llm(prompt)
 
     # ========== 完整的 Agent 循环 ==========
-    def chat(self, user_msg: str) -> str:
+    def chat(self, user_msg: str, topic: str = "") -> str:
         query = self._build_query(user_msg)              # 组装检索查询
         hits = self._retrieve(query)                     # ① 检索（代码真的执行）
-        answer = self._respond(user_msg, hits)           # ② 回应
+        answer = self._respond(user_msg, hits, topic)    # ② 回应
         self.history.append((user_msg, answer))          # ③ 记忆
         self.last_hits = hits
         if self.verbose:
             shown = [f"[{i}]{d['title'][:18]}({s})" for i, d, s in hits] or ["（无命中）"]
             print(f"  ① Retrieve → {shown}")
         return answer
+
+
+# ==================== 第四幕：开局（TA 的分身先开口 + 双模块话题）====================
+def build_opening_prompt(agent: "SoulAgent", prompt_template: str, my_lib: list | None,
+                         my_state: str) -> str:
+    """拼出「开场白 + 两组话题」的 prompt（见 prompts/4c-开场与话题.md）。
+
+    - agent     = TA 的分身（提供人格档案与资料库）
+    - my_lib    = 我的资料库（没生成过就是 None → 模块2 留空）
+    - my_state  = 给我的档案状态的一句话说明（让模型知道该不该生成模块2）
+    只负责拼 prompt（LLM 调用由 server 走 cli_answer，与破冰卡/匹配卡同一条路）。
+    """
+    ta_lib = "\n".join(f"[{i}] 《{d['title']}》：{d['summary']}"
+                       for i, d in enumerate(agent.library, 1)) or "（TA 没有可用的公开内容）"
+    mine = ("\n".join(f"[{i}] 《{d['title']}》：{d['summary']}"
+                      for i, d in enumerate(my_lib, 1)) if my_lib else "（还没有：用户尚未生成自己的档案）")
+    body = (prompt_template
+            .replace("{TA 的名字}", agent.name)
+            .replace("{TA 的灵魂档案}", agent.persona)
+            .replace("{TA 的资料库}", ta_lib)
+            .replace("{我的资料库}", mine)
+            .replace("{我的档案状态}", my_state))
+    hdr = "以下是这次的真实输入，严格据此生成：\n\n"
+    return hdr + body
 
 
 # ==================== A2A：两个分身相遇 ====================
@@ -175,7 +189,8 @@ def _split_speech(raw: str) -> tuple:
     """
     raw = (raw or "").strip()
     ev, sp = "", raw
-    m = re.search(r"【发言】\s*", raw)
+    # ⚠️ 两个段名都要认：A2A 用【发言】，「人 × TA 的分身」用【回应】
+    m = re.search(r"【(?:发言|回应)】\s*", raw)
     if m:
         sp = raw[m.end():].strip()
         ev = re.sub(r"^【依据】\s*", "", raw[:m.start()].strip()).strip()
@@ -188,7 +203,9 @@ def _split_speech(raw: str) -> tuple:
     return ev, sp
 
 
-SPEAK_RULES = """规则（违反任何一条都算失败）：
+# ⚠️ 这套规则是**共用**的：A2A（speak_to）和「人 × TA 的分身」（_respond）都用它。
+# 以前两处各写一套，改了一边另一边就悄悄走样 —— 别再各写一份。
+_RULES_CORE = """规则（违反任何一条都算失败）：
 1. 你在**和一个人聊天**，不是回答问题、也不是汇报资料。可以追问、反驳、接梗、举例、说自己的看法、承认不知道。
 2. **事实必须真**：TA 的观点、经历、结论、数字、案例、人名，只能来自上面给你的内容；有就写【依据】[编号]，**只能引用这些编号**：{allowed}。**严禁编造不存在的编号，也严禁编造内容里没有的具体细节。**
 3. **说话方式不必有出处**：你的反应、感受、态度、追问、比方、常识都不需要依据，放开说。**你不需要每句话都有出处。**
@@ -198,10 +215,20 @@ SPEAK_RULES = """规则（违反任何一条都算失败）：
 7. 保持 TA 的立场和口吻，**不要迎合对方**。该不同意就不同意，该追问就追问。
 8. 禁客套（「很高兴认识你」「感谢分享」）。直接进入内容。
 9. **【依据】里只写编号，或者留空。** 不要解释「为什么这轮没有依据」—— 那种解释是噪音。
+"""
 
+SPEAK_RULES = _RULES_CORE + """
 输出格式（两段）：
 【依据】…
 【发言】…"""
+
+# 「人 × TA 的分身」用同一套内核；段名不同，且要说清「话题只是由头」
+CHAT_RULES = _RULES_CORE + """
+【对话历史】和【你们在聊的话题】是上下文，不是任务书：话题只是由头，聊天本身才是重点。
+
+输出格式（两段）：
+【依据】…
+【回应】…"""
 
 
 def speak_to(self, peer_key: str, peer_name: str, dialogue: list,

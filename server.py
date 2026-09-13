@@ -335,6 +335,7 @@ class LoadReq(BaseModel):
 class ChatReq(BaseModel):
     session_id: str
     message: str
+    topic: str = ""                  # 第四幕：这场聊天是由哪个话题起的头（可为空）
 
 
 @app.post("/api/candidates")
@@ -446,10 +447,102 @@ def api_chat(req: ChatReq):
     if not req.message.strip():
         return {"ok": False, "error": "说点什么吧"}
 
-    reply = agent.chat(req.message)
+    reply = agent.chat(req.message, topic=req.topic)
+    # ⚠️ 模型输出是两段（【依据】…/【回应】…）—— 必须拆开再给前端，
+    # 否则界面上会原样显示「【依据】[12] 【回应】…」，很难看。
+    from agent import _split_speech
+    ev, sp = _split_speech(reply)
     hits = [{"id": i, "title": d["title"], "summary": d["summary"], "sim": s}
             for i, d, s in agent.last_hits]
-    return {"ok": True, "reply": reply, "hits": hits, "round": len(agent.history)}
+    return {"ok": True, "reply": sp or reply, "evidence": ev,
+            "hits": hits, "round": len(agent.history)}
+
+
+# ==================== 第四幕开局：TA 的分身先开口 + 双模块话题 ====================
+
+class OpenReq(BaseModel):
+    session_id: str
+    user_id: str = ""                # 有存档时才知道「你们的交集」，否则模块2 留空
+
+
+def _parse_opening(raw: str) -> dict:
+    """解析 prompts/4c 的输出（【开场】/【模块1】/【模块2】）。
+
+    容错优先：模型偶尔会漏段、多写一句解释。能救就救；救不回来就返回空列表 ——
+    前端有「我自己写」这条永远存在的出口，不会把用户卡死。
+    """
+    text = (raw or "").replace(chr(13), "")
+    out = {"opening": "", "m1": [], "m2": []}
+
+    m = re.search(r"【开场】\s*(.+?)(?=\s*【模块|$)", text, re.S)
+    if m:
+        out["opening"] = re.sub(r"\s+", " ", m.group(1)).strip().strip("`")
+
+    for key, tag in (("m1", "【模块1】"), ("m2", "【模块2】")):
+        seg = re.search(re.escape(tag) + r"\s*(.*?)(?=\s*【模块|\s*$)", text, re.S)
+        if not seg:
+            continue
+        for line in seg.group(1).splitlines():
+            line = line.strip().strip("`").strip()
+            if "|" not in line:
+                continue
+            parts = [x.strip() for x in line.split("|")]
+            if len(parts) < 2:
+                continue
+            label = parts[1]
+            # 过滤表头与空占位
+            if not label or label in ("（无）", "无", "话题文字", "话题"):
+                continue
+            refs = [int(x) for x in re.findall(r"\d+", parts[2])] if len(parts) >= 3 else []
+            out[key].append({
+                "text": label,
+                "refs": refs[:4],
+                "recommend": len(parts) >= 4 and "推荐" in parts[3],
+            })
+    return out
+
+
+@app.post("/api/opening")
+def api_opening(req: OpenReq):
+    """第四幕开局：TA 的分身先开口（说「我最近在琢磨什么」）+ 两组可选话题。
+
+    - 模块1「他最在行的」：只能来自 TA 的资料库（背后挂 2～4 篇原文）
+    - 模块2「你们可能都感兴趣的」：**必须用户先有自己的档案** —— 没有就返回 locked，
+      前端显示锁态卡片让用户主动按（不静默生成，见 v5 决策）
+    """
+    ta = SESSIONS.get(req.session_id)
+    if not ta:
+        raise HTTPException(status_code=404, detail="会话已失效，请重新开始")
+
+    my_lib, my_state = None, "用户还没生成自己的档案 → 模块2 留空（locked）"
+    if req.user_id:
+        rec = _load_json(USERS_DIR / f"{_safe_key(req.user_id)}.json", None)
+        if rec and rec.get("library"):
+            my_lib = rec["library"]
+            my_state = f"用户（{rec.get('name') or '我'}）的档案已生成，可以找交集了"
+        elif rec and rec.get("persona"):
+            my_state = "用户有档案但没有内容索引 → 模块2 留空（locked）"
+
+    p = (ROOT / "prompts" / "4c-开场与话题.md").read_text(encoding="utf-8")
+    p = p.split("---", 2)[2].strip() if p.startswith("---") else p
+
+    from agent import build_opening_prompt
+    raw = cli_answer(build_opening_prompt(ta, p, my_lib, my_state))
+    got = _parse_opening(raw)
+
+    return {
+        "ok": True,
+        "ta_name": ta.name,
+        "opening": got["opening"] or f"我是{ta.name}的分身。你最近在琢磨什么？",
+        "modules": [
+            {"key": "his", "label": "他最在行的", "locked": False, "topics": got["m1"]},
+            {"key": "both", "label": "你们可能都感兴趣的", "locked": my_lib is None,
+             "topics": got["m2"]},
+        ],
+        # 解析失败时把原文带回去（只给开发看，界面不展示）：
+        "parse_failed": not got["m1"] and not got["m2"],
+        "raw": raw[:2000] if not got["m1"] and not got["m2"] else "",
+    }
 
 
 class DuelReq(BaseModel):
@@ -523,6 +616,102 @@ def api_duel(req: DuelReq):
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ==================== 第四幕产出：针对 TA 某篇内容的评论 ====================
+
+class CommentReq(BaseModel):
+    session_id: str
+    topic: str = ""
+    dialogue: list = []              # 这场聊天（[{name, text}]）—— 只用来判断「他想问什么」
+    n: int = 3
+
+
+def _parse_comments(raw: str) -> list:
+    """解析 prompts/5 的输出：序号|形态|正文|编号"""
+    out = []
+    for line in (raw or "").replace("\r", "").splitlines():
+        line = line.strip().strip("`").strip()
+        if "|" not in line:
+            continue
+        parts = [x.strip() for x in line.split("|")]
+        if len(parts) < 3:
+            continue
+        text = parts[2]
+        if not text or text in ("评论正文", "正文"):
+            continue
+        kind = parts[1].lower()
+        ref = None
+        if len(parts) >= 4:
+            m = re.search(r"\d+", parts[3])
+            if m:
+                ref = int(m.group(0))
+        out.append({"kind": kind if kind in ("a", "c") else "a", "text": text, "ref": ref})
+    return out
+
+
+@app.post("/api/comment")
+def api_comment(req: CommentReq):
+    """生成「针对 TA 某篇内容、可直接发出去」的评论。
+
+    依据地基：**只用 TA 公开发布的内容**（标题 + 摘要）。
+    对话记录只用来判断这个人想问什么 —— 每条评论都挂着它的出处，用户能自己核。
+    """
+    ta = SESSIONS.get(req.session_id)
+    if not ta:
+        raise HTTPException(status_code=404, detail="会话已失效，请重新开始")
+
+    # 候选内容：话题 + 最近几句对话 → 检索出最相关的几篇（必须有原文链接）
+    q = " ".join([req.topic] + [str(d.get("text", "")) for d in (req.dialogue or [])[-4:]]).strip()
+    hits = ta._retrieve(q) if q else []
+    cands, seen = [], set()
+    for idx, doc, _ in hits:
+        if idx in seen or not doc.get("url"):
+            continue
+        seen.add(idx)
+        cands.append((idx, doc))
+        if len(cands) >= 6:
+            break
+
+    # 检索没命中就退回到时间线最前面的几篇（有链接的）
+    if not cands:
+        for i, doc in enumerate(ta.library, 1):
+            if doc.get("url"):
+                cands.append((i, doc))
+            if len(cands) >= 6:
+                break
+
+    if not cands:
+        return {"ok": False, "error": "TA 的内容里没找到能挂原文链接的（评论要能核到出处才有意义）"}
+
+    lib_text = "\n".join(f"[{i}] 《{d['title']}》\n    摘要：{d.get('summary', '')}" for i, d in cands)
+    convo = "\n".join(f"{t.get('name', '')}：{t.get('text', '')}" for t in (req.dialogue or [])[-8:])
+
+    p = (ROOT / "prompts" / "5-评论.md").read_text(encoding="utf-8")
+    p = p.split("---", 2)[2].strip() if p.startswith("---") else p
+    raw = cli_answer(
+        f"{p}\n\n【TA 的名字】{ta.name}\n\n【候选内容】\n{lib_text}\n\n"
+        f"【这个用户刚聊过的话题】{req.topic or '（没指定）'}\n\n"
+        f"【刚刚这场对话（只用来判断他想问什么，绝不能当 TA 说过的话）】\n{convo or '（没聊几句）'}"
+    )
+
+    items = _parse_comments(raw)
+    by_idx = {i: d for i, d in cands}
+    comments = []
+    for it in items[: max(1, min(req.n, 4))]:
+        doc = by_idx.get(it["ref"]) or cands[0][1]
+        comments.append({
+            "kind": it["kind"],
+            "text": it["text"],
+            "title": doc["title"],
+            "url": doc.get("url", ""),
+            "summary": (doc.get("summary") or "")[:160],
+        })
+
+    return {"ok": True, "ta_name": ta.name,
+            "comments": comments,
+            "parse_failed": not comments,
+            "raw": raw[:1500] if not comments else ""}
 
 
 @app.post("/api/icebreak")
