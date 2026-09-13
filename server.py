@@ -140,7 +140,7 @@ BODY_LIMIT = 1200
 
 # 取料方式一改就 +1：缓存里记了这个版本号，旧档案会被判为过期、自动重建。
 # （不升版本号的话，改了取料也读不到效果 —— 旧的档案还在缓存里）
-MATERIAL_VERSION = 4
+MATERIAL_VERSION = 5
 
 
 def _search_items(query: str, count: int = 10, retries: int = 2) -> list:
@@ -264,6 +264,65 @@ def forge_soul(name: str, library: list) -> str:
     return cli_answer(f"{p}\n\n【答主的公开内容】{name}：\n{material}")
 
 
+# 素材薄到这个程度就画不出「人格」了 —— 改画「关注画像」（prompts/1b-关注画像.md），
+# 只说他关注什么，不硬凑他是谁。实测：1 条 119 字的素材硬写人格，只会产出套话。
+PROFILE_MAX_CHARS = 700
+
+
+def _lib_chars(lib: list) -> int:
+    return sum(len(x.get("title") or "") + len(x.get("summary") or "") for x in lib)
+
+
+def is_thin(lib: list) -> bool:
+    """素材够不够画人格。不够 → 走「关注画像 + 匹配卡」那条路（不做分身对谈）。"""
+    return _lib_chars(lib) <= PROFILE_MAX_CHARS
+
+
+def is_too_thin(lib: list) -> bool:
+    """薄到读不出「关注什么」（只剩几条个人化的只言片语）。
+
+    这种素材画出来的卡片会是「无重合 / 得不出方向」—— 诚实但像坏了。
+    前端据此请用户补一句「我了解的 TA」。
+    """
+    return len(lib) <= 2 and _lib_chars(lib) <= 250
+
+
+def forge_profile(name: str, library: list, extra: str = "") -> str:
+    """画「关注地图」：他关注什么、到哪一层，并写明看不出什么。
+
+    extra = 附加素材块（收藏夹名字 / 本人自述），**标签由调用方带进来** ——
+    因为这条既给「TA」画，也给「我自己」画，标签不能写死成 TA。
+    """
+    p = (ROOT / "prompts" / "1b-关注画像.md").read_text(encoding="utf-8")
+    p = p.split("---", 2)[2].strip() if p.startswith("---") else p
+    material = "\n".join(f"- {x['title']}（{x['summary']}）" for x in library)
+    more = f"\n\n{extra}" if extra else ""
+    return cli_answer(
+        f"{p}\n\n【素材】要画像的人：{name}\n{material}{more}\n\n"
+        f"补充事实：能读到的素材只有 {len(library)} 条、约 {_lib_chars(library)} 字，"
+        f"素材少这件事在画像里如实说明。")
+
+
+_FAVLISTS_API = "https://www.zhihu.com/api/v4/members/{token}/favlists?limit=10"
+
+
+def fetch_favlist_titles(token: str) -> str:
+    """TA 的公开收藏夹名字（免鉴权可读；夹子里的内容读不到）。
+
+    素材太薄时它是有用的补充信号 —— 「第一卷：有价值及有意思的资料」这种夹子名
+    本身就说明他在意什么。
+    """
+    if not token:
+        return ""
+    try:
+        d = json.loads(_zhihu_get(_FAVLISTS_API.format(
+            token=urllib.parse.quote(token))).decode("utf-8"))
+    except Exception:
+        return ""
+    titles = [str(f.get("title") or "").strip() for f in (d.get("data") or [])]
+    return "、".join([t for t in titles if t][:10])
+
+
 # ============================================================
 # 接口
 # ============================================================
@@ -319,6 +378,8 @@ def api_load(req: LoadReq):
     from_cache = bool(cached)
     if cached:
         author, library, persona = cached["name"], cached["library"], cached["persona"]
+        # 老缓存没有 mode 字段：按素材量补算
+        mode = cached.get("mode") or ("profile" if is_thin(library) else "soul")
     else:
         library = take_by_signature(name, signature)
         if not library:
@@ -345,8 +406,16 @@ def api_load(req: LoadReq):
                 f"（等几秒再点一次生成），也可能是 TA 的内容没被知乎搜索收录。"),
                 "debug": dict(_ZHIHU_ERR)}
         author = name
-        persona = forge_soul(author, library)
-        cached = {"name": author, "library": library, "persona": persona,
+        # 素材薄 → 不硬凑人格，改画「关注地图」（下游走匹配卡，不做分身对谈）
+        mode = "profile" if is_thin(library) else "soul"
+        if mode == "profile":
+            _fav = fetch_favlist_titles(signature)
+            _extra = (f"【TA 的公开收藏夹名字（只看得到名字，看不到内容）】\n{_fav}"
+                      if _fav else "")
+            persona = forge_profile(author, library, _extra)
+        else:
+            persona = forge_soul(author, library)
+        cached = {"name": author, "library": library, "persona": persona, "mode": mode,
                   "material_version": MATERIAL_VERSION,
                   "cached_at": int(time.time())}
         SOUL_CACHE[key] = cached
@@ -362,6 +431,9 @@ def api_load(req: LoadReq):
         "library": library,
         "count": len(library),
         "cached": from_cache,
+        "mode": mode,          # soul=人格档案；profile=关注地图（素材薄，下游走匹配卡）
+        "chars": _lib_chars(library),
+        "too_thin": is_too_thin(library),   # 薄到读不出关注点 → 前端请用户补一句
     }
 
 
@@ -405,13 +477,14 @@ def api_duel(req: DuelReq):
     ta = SESSIONS.get(req.session_id)
     if not ta:
         raise HTTPException(status_code=404, detail="会话已失效，请重新开始")
-    # 自我介绍只是「没有存档可用」时的兜底：
-    # 已经用知乎授权建过分身的人（persona/library 来自他本人的创作），不该被迫再写一遍。
-    # 旧写法一刀切要求 intro ≥ 10 字，会把这条主路径直接挡死（400）。
+    # 「你」必须来自存档：用户用知乎授权建的分身（persona/library 来自他本人的创作）。
+    # 不再有「跳过生成、用一句自我介绍代班」那条路 —— 那样两个没内容的角色只会客套。
     rec0 = _load_json(USERS_DIR / f"{_safe_key(req.user_id)}.json", None) if req.user_id else None
     has_archive = bool(rec0 and (rec0.get("persona") or rec0.get("library")))
-    if len(req.intro.strip()) < 10 and not has_archive:
-        raise HTTPException(status_code=400, detail="再多写两句吧，分身才有的聊")
+    # 没有存档就没有「你」——不假装能聊（正常路径下前端不会走到这：
+    # 必须先建成分身，幕 3 才会出现开始按钮）
+    if not has_archive:
+        raise HTTPException(status_code=400, detail="还没建你的分身，先生成一个再开始")
 
     def gen():
         try:
@@ -471,6 +544,41 @@ def api_icebreak(req: IceReq):
     return {"ok": True, "card": card, "ta_name": ta.name}
 
 
+
+class MatchReq(BaseModel):
+    session_id: str
+    user_id: str = ""
+    ta_note: str = ""      # 素材太薄时，用户自己对 TA 的了解（一句话/几句）
+
+
+@app.post("/api/match")
+def api_match(req: MatchReq):
+    """兴趣匹配卡：TA 的素材太薄时**不做双分身对谈**（没有语言样本，对谈只会客套），
+    直接比两边「关注地图」的重合，给一张卡 + 破冰话术。"""
+    ta = SESSIONS.get(req.session_id)
+    if not ta:
+        return {"ok": False, "error": "会话已失效，请重新开始"}
+    rec = _load_json(USERS_DIR / f"{_safe_key(req.user_id)}.json", None) if req.user_id else None
+    if not rec or not (rec.get("persona") or rec.get("library")):
+        return {"ok": False, "error": "还没建你的分身，先生成一个再开始"}
+
+    p = (ROOT / "prompts" / "4b-匹配卡.md").read_text(encoding="utf-8")
+    p = p.split("---", 2)[2].strip() if p.startswith("---") else p
+    # TA 那侧：素材（可能薄到没用）+ 用户自己补的一句「我了解的 TA」
+    ta_side = ta.persona
+    note = (req.ta_note or "").strip()
+    if note:
+        ta_side += (f"\n\n【用户自己对 TA 的了解（用户写的，不是 TA 的公开内容）】\n{note}\n"
+                    f"注意：这一部分来自用户转述，不是 TA 公开内容的推论 —— 用它的时候要标明来源，"
+                    f"别当成「素材里读出来的」。")
+    card = cli_answer(
+        f"{p}\n\n【我的关注地图】\n{rec.get('persona') or ''}\n\n"
+        f"【TA 的关注地图】\n{ta_side}\n\n"
+        f"补充事实：TA 能读到的公开创作只有 {len(ta.library)} 条"
+        f"（约 {_lib_chars(ta.library)} 字），卡片上要如实标出这件事。")
+    return {"ok": True, "card": card, "ta_name": ta.name, "ta_count": len(ta.library)}
+
+
 class MeReq(BaseModel):
     user_id: str
     name: str = "我"
@@ -507,6 +615,7 @@ def api_me_save(req: MeReq, request: Request):
             "intro": req.intro.strip() or old.get("intro", ""),
             "persona": req.persona.strip(),
             "source": "edited",
+            "mode": old.get("mode") or "soul",
             "library": old.get("library", []),
             "count": old.get("count", 0),
             "edited": True,
@@ -532,21 +641,36 @@ def api_me_save(req: MeReq, request: Request):
         if not my_lib:
             return {
                 "ok": False,
-                "error": "你的知乎账号里还没读到公开创作。可以先写几条，"
-                         "或者选「暂时跳过」，用一句自我介绍先代班。",
+                "error": "你的知乎账号里还没读到公开创作 —— 没有素材就画不出画像。"
+                         "可以先在知乎写几条，或过一会儿再试。",
             }
 
-        material = "\n".join(f"- {x['title']}（{x['summary']}）" for x in my_lib)
-        p = (ROOT / "prompts" / "1-灵魂档案.md").read_text(encoding="utf-8")
-        p = p.split("---", 2)[2].strip() if p.startswith("---") else p
-        extra = f"\n\n【本人补充】\n{req.intro.strip()}" if req.intro.strip() else ""
-        persona = cli_answer(f"{p}\n\n【这个人在知乎的公开创作】\n{material}{extra}")
+        # 素材薄 → 不硬凑人格，改画「关注地图」（后面走匹配卡，不做分身对谈）
+        mode = "profile" if is_thin(my_lib) else "soul"
+        if mode == "profile":
+            _prof = sess.get("profile") or {}
+            _fav = fetch_favlist_titles(_prof.get("url_token") or _prof.get("urlToken") or "")
+            _blocks = []
+            # 素材薄时，本人亲手写的那句介绍是最可信的一条素材 —— 别丢
+            if req.intro.strip():
+                _blocks.append(f"【本人自述（本人写的，比公开素材可信）】\n{req.intro.strip()}")
+            if _fav:
+                _blocks.append(f"【本人公开收藏夹名字（只看得到名字，看不到内容）】\n{_fav}")
+            persona = forge_profile(req.name.strip() or old.get("name") or "我", my_lib,
+                                    "\n\n".join(_blocks))
+        else:
+            material = "\n".join(f"- {x['title']}（{x['summary']}）" for x in my_lib)
+            p = (ROOT / "prompts" / "1-灵魂档案.md").read_text(encoding="utf-8")
+            p = p.split("---", 2)[2].strip() if p.startswith("---") else p
+            extra = f"\n\n【本人补充】\n{req.intro.strip()}" if req.intro.strip() else ""
+            persona = cli_answer(f"{p}\n\n【这个人在知乎的公开创作】\n{material}{extra}")
         rec = {
             "user_id": uid,
             "name": (req.name.strip() or old.get("name") or "我"),
             "intro": req.intro.strip(),
             "persona": persona,
             "source": "oauth",
+            "mode": mode,
             "count": len(my_lib),
             "library": my_lib,
             "zhihu": sess.get("profile") or {},

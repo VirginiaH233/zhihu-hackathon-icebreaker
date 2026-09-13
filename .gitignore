@@ -24,5 +24,7 @@ data/
 *.bak-*
 设计预览-*.html
 
-# 本地开发：起服务时的滚动日志（不是项目资产，logs/*.md 的实测日志照旧保留）
+# 本地开发：起服务时的滚动日志 + 发布脚本的临时输出（不是项目资产，logs/*.md 实测日志与 deploy.log 照旧保留）
 logs/dev-server.log
+logs/deploy-tmp-server.log
+logs/*.out
