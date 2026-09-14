@@ -160,7 +160,8 @@ BODY_LIMIT = 1200
 # （不升版本号的话，改了取料也读不到效果 —— 旧的档案还在缓存里）
 # v6（2026-09-14）：补「想法」的阈值从 <3 提到 <8 —— 取料结果变了，旧缓存（可能只
 #                   抓到三五条）必须重建，否则修了也白修。
-MATERIAL_VERSION = 6
+MATERIAL_VERSION = 7    # v6→v7：剔毒素材也要落进 library（v6 的缓存只剔了档案没剔素材，
+                    # 导致对话阶段又检索到毒素材、分身开口说「我是知乎直答」。改版本号让旧档自动重建）
 
 # 产品对外地址 —— 分享卡上的二维码指向它（带 ?from=card，将来能看扫码来源）。
 # 线上用环境变量覆盖；本地开发默认线上地址（本地二维码也扫得出、跳线上）。
@@ -394,12 +395,18 @@ def forge_soul(name: str, library: list) -> str:
     return cli_answer(f"{p}\n\n【答主的公开内容】{name}：\n{material}")
 
 
-def forge_soul_chunked(name: str, library: list, chunk_size: int = 3) -> str:
+def forge_soul_chunked(name: str, library: list, chunk_size: int = 3) -> tuple:
     """整批生成翻车时的自救：分块找出触发直答安全兜底的「毒素材」，用健康子集重生成。
 
     实测（梁边妖 20 条）：单放某些内容（性别自嘲 / 具体人物恩怨 / 涉政）会让直答
     **确定性地**返回「我是知乎直答」的自我介绍，且重试无效（内容没变）。只能剔除。
     分块时每块只调 1 次（不重试，省额度），翻车的整块丢弃；健康子集 ≥3 条再整批生成。
+
+    ⚠️ 返回 `(persona, healthy_library)` —— **健康素材也必须返回**。
+    曾经只返回 persona，调用方把含毒素材的原始 library 一起存进了档案，
+    结果：档案本身是干净的，但**用户聊天时 Agent 重新检索素材，又撞上毒素材**，
+    分身开口就说「我是知乎直答」。剔毒必须一致到底（本轮 e2e 质量断言抓到的真 bug）。
+    失败时返回 ("", [])，调用方据此走下一层降级、且**不要**用空的素材覆盖原 library。
     """
     healthy: list = []
     for i in range(0, len(library), chunk_size):
@@ -411,8 +418,8 @@ def forge_soul_chunked(name: str, library: list, chunk_size: int = 3) -> str:
             titles = "、".join((x.get("title") or "")[:14] for x in chunk)
             print(f"[warn] 剔除翻车素材块（第 {i}-{i + len(chunk) - 1} 条）：{titles}", flush=True)
     if len(healthy) < 3:
-        return ""
-    return forge_with_check(lambda: forge_soul(name, healthy), name)
+        return "", []
+    return forge_with_check(lambda: forge_soul(name, healthy), name), healthy
 
 
 # 素材薄到这个程度就画不出「人格」了 —— 改画「关注画像」（prompts/1b-关注画像.md），
@@ -576,7 +583,10 @@ def api_load(req: LoadReq):
             # 三层兜底：整批 → 分块剔毒素材 → 退关注画像（更简单，更少触发安全兜底）
             persona = forge_with_check(lambda: forge_soul(author, library), author)
             if not persona:
-                persona = forge_soul_chunked(author, library)
+                persona, _healthy = forge_soul_chunked(author, library)
+                if persona:
+                    # 剔毒后的素材要一起换掉：对话阶段会重新检索 library
+                    library = _healthy
             if not persona:
                 _fav = fetch_favlist_titles(signature)
                 _extra = (f"【TA 的公开收藏夹名字（只看得到名字，看不到内容）】\n{_fav}"
