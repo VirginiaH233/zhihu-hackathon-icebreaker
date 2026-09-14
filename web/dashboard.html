@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>社恐破冰船 · 数据看板</title>
+<style>
+  :root { --bg:#F4F8FB; --card:#fff; --ink:#1F2D3D; --ink-soft:#48596B;
+          --sub:#6B8299; --line:#DCE7F0; --accent:#ff7a59; --good:#2f9e8f; --warn:#d97706; --bad:#c9542f; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:28px 20px 60px; background:var(--bg); color:var(--ink);
+         font:15px/1.65 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 21px; margin: 0 0 4px; }
+  .lead { color: var(--sub); font-size: 13px; margin-bottom: 22px; }
+  .card { background: var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:18px 20px; margin-bottom:16px; }
+  .card h2 { font-size: 14px; margin: 0 0 4px; letter-spacing:.02em; }
+  .card .hint { font-size: 12.5px; color: var(--sub); margin-bottom: 14px; }
+
+  /* 北极星 */
+  #north { background: linear-gradient(135deg,#fff6f2,#fffdf9); border-color:#ffd9cc; }
+  #north .big { font-size: 44px; font-weight: 800; color: var(--accent); line-height:1.1; }
+  #north .why { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
+
+  /* 漏斗 */
+  .step { display:flex; align-items:center; gap:12px; margin:9px 0; }
+  .step .label { width: 104px; flex:0 0 auto; font-size: 13.5px; }
+  .step .barwrap { flex:1; background:#f1f5f9; border-radius:7px; height: 26px; overflow:hidden; }
+  .step .bar { height:100%; background: linear-gradient(90deg,#ffb59e,#ff7a59);
+               border-radius:7px; transition: width .5s; min-width: 2px; }
+  .step .num { width: 76px; flex:0 0 auto; text-align:right; font-variant-numeric: tabular-nums;
+               font-size: 13.5px; color: var(--ink-soft); }
+  .step .rate { width: 58px; flex:0 0 auto; text-align:right; font-size: 12px; }
+  .rate.hi { color: var(--good); } .rate.mid { color: var(--warn); } .rate.lo { color: var(--bad); }
+
+  table { width:100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align:left; padding:7px 4px; border-bottom:1px solid var(--line); }
+  th { color: var(--sub); font-weight: 600; font-size: 12px; }
+  td.n { text-align:right; font-variant-numeric: tabular-nums; }
+  .empty { color: #9aa3b0; font-size: 13px; padding: 6px 0; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:20px; font-size:11.5px;
+         background:#eef4fa; color:var(--ink-soft); }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .kpi { background:#f8fbfd; border:1px solid var(--line); border-radius:11px; padding:12px 14px; }
+  .kpi .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .k { font-size: 12px; color: var(--sub); margin-top:2px; }
+  .err { color: var(--bad); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .foot { color:#9aa3b0; font-size:12px; margin-top:24px; text-align:center; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid #dbe6f0;
+          border-top-color:var(--accent); border-radius:50%; animation:s .8s linear infinite; vertical-align:-2px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>社恐破冰船 · 数据看板</h1>
+  <div class="lead">数据每次打开都是最新的（直接读线上 <code>/api/stats</code>）<span id="ts"></span></div>
+  <div id="app"></div>
+  <div class="foot">北极星与漏斗定义见项目根目录《数据指标参考.md》</div>
+</div>
+
+<script>
+const FUNNEL_STEPS = [
+  ['visit',    '访问'],
+  ['search',   '搜人'],
+  ['soul',     '读 TA'],
+  ['me',       '建自己分身'],
+  ['comment',  '拿到评论'],
+  ['copy_comment', '复制走 ★'],
+];
+const $ = (s) => document.querySelector(s);
+const esc = (s) => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function rateClass(p) { return p >= 60 ? 'hi' : (p >= 30 ? 'mid' : 'lo'); }
+
+function render(d) {
+  const f = d.funnel || {};
+  const ns = d.north_star || {};
+  const first = f.visit || 0;
+
+  let h = '';
+
+  // 北极星
+  h += `<div class="card" id="north">
+    <h2>北极星 · ${esc(ns.metric || 'copy_comment')}</h2>
+    <div class="big">${ns.value ?? 0}</div>
+    <div class="why">${esc(ns.why || '')}</div>
+  </div>`;
+
+  // 漏斗
+  h += `<div class="card"><h2>漏斗</h2>
+    <div class="hint">每一步多少人走到 —— 看「哪一步掉得最狠」，那里就是最该优化的一环。</div>`;
+  if (!first) {
+    h += `<div class="empty">还没有数据（产品刚上线 / 还没有人访问）</div>`;
+  } else {
+    FUNNEL_STEPS.forEach(([k, label], i) => {
+      const v = f[k] || 0;
+      const w = first ? Math.max(1, Math.round(v / first * 100)) : 0;
+      const prev = i === 0 ? null : (f[FUNNEL_STEPS[i-1][0]] || 0);
+      const pct = prev ? Math.round(v / prev * 100) : null;
+      const rc = pct === null ? '' : rateClass(pct);
+      h += `<div class="step">
+        <div class="label">${label}</div>
+        <div class="barwrap"><div class="bar" style="width:${w}%"></div></div>
+        <div class="num">${v}</div>
+        <div class="rate ${rc}">${pct === null ? '' : pct + '%'}</div>
+      </div>`;
+    });
+    h += `<div class="hint" style="margin-top:12px">最右列 = 相对上一步的转化率。60% 以上绿、30–60% 黄、30% 以下红。</div>`;
+  }
+  h += `</div>`;
+
+  // 存量
+  h += `<div class="card"><h2>存量</h2>
+    <div class="hint">已经沉淀下来的资产 —— 答主档案是全站复用的公共资产（同一个答主只建一次）。</div>
+    <div class="grid">
+      <div class="kpi"><div class="v">${d.users ?? 0}</div><div class="k">生成过分身的人数</div></div>
+      <div class="kpi"><div class="v">${d.souls ?? 0}</div><div class="k">读过的答主数</div></div>
+      <div class="kpi"><div class="v">${d.talked_users ?? 0}</div><div class="k">真的聊过的人</div></div>
+      <div class="kpi"><div class="v">${(d.soul_modes && d.soul_modes.profile) || 0}</div><div class="k">素材薄→关注地图</div></div>
+    </div>
+  </div>`;
+
+  // 热门答主
+  const hot = d.hot || [];
+  h += `<div class="card"><h2>热门答主</h2>
+    <div class="hint">谁被聊得最多 → 该给谁预热档案（让他被点开时秒出）、该放谁进首屏示例。</div>`;
+  h += hot.length
+    ? `<table><tr><th>答主</th><th style="text-align:right">被聊次数</th></tr>` +
+      hot.map(([n, c]) => `<tr><td>${esc(n)}</td><td class="n">${c}</td></tr>`).join('') + `</table>`
+    : `<div class="empty">还没有数据</div>`;
+  h += `</div>`;
+
+  // 搜不到的人
+  const fs = d.failed_searches || [];
+  h += `<div class="card"><h2>搜不到的人</h2>
+    <div class="hint">用户搜了谁但没搜到 —— 这是优化「找人」最值钱的信号（可能是搜索路径有洞）。</div>`;
+  h += fs.length
+    ? `<table><tr><th>搜的词</th><th style="text-align:right">次数</th></tr>` +
+      fs.map(([q, c]) => `<tr><td>${esc(q)}</td><td class="n">${c}</td></tr>`).join('') + `</table>`
+    : `<div class="empty">没有搜不到的情况（或还没有人搜过）</div>`;
+  h += `</div>`;
+
+  // 报错
+  const errs = d.recent_errors || [];
+  h += `<div class="card"><h2>最近报错</h2>
+    <div class="hint">线上未捕获异常（自动记录）—— 空的就是好消息。</div>`;
+  h += errs.length
+    ? errs.slice(-6).reverse().map(e =>
+        `<div style="margin-bottom:7px"><span class="tag">${esc(e.path||'')}</span>
+         <span class="err">${esc(e.err||'')}</span></div>`).join('')
+    : `<div class="empty">✓ 最近没有报错</div>`;
+  h += `</div>`;
+
+  $('#app').innerHTML = h;
+}
+
+function load() {
+  $('#app').innerHTML = '<div class="card"><span class="spin"></span> 正在读数据…</div>';
+  fetch('/api/stats', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(d => { $('#ts').textContent = ' · 更新于 ' + new Date().toLocaleTimeString(); render(d); })
+    .catch(e => { $('#app').innerHTML = '<div class="card"><div class="err">读不到数据：' + esc(e.message) + '</div></div>'; });
+}
+load();
+setInterval(load, 60000);   // 每分钟自动刷新
+</script>
+</body>
+</html>

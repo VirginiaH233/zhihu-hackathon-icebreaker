@@ -629,6 +629,7 @@ def api_chat(req: ChatReq):
     ev, sp = _split_speech(reply)
     hits = [{"id": i, "title": d["title"], "summary": d["summary"], "sim": s}
             for i, d, s in agent.last_hits]
+    _event("chat", uid=(req.user_id or "")[:24], name=agent.name, round=len(agent.history))
     return {"ok": True, "reply": sp or reply, "evidence": ev,
             "hits": hits, "round": len(agent.history)}
 
@@ -782,6 +783,16 @@ def api_stats():
         "failed_searches": sorted(failed.items(), key=lambda x: -x[1])[:10],  # 搜不到的人
         "recent_errors": errors[-10:],       # 最近的线上报错（含路径和异常类型）
     }
+
+
+@app.get("/dashboard")
+def dashboard():
+    """数据看板（给产品负责人看的）。
+
+    不设口令：里面全是聚合数字（人数/次数/公开答主名），不含任何用户内容。
+    路径不对外宣传，靠「知道链接」访问。
+    """
+    return FileResponse(str(ROOT / "web" / "dashboard.html"))
 
 
 # ==================== 第四幕开局：TA 的分身先开口 + 双模块话题 ====================
@@ -1144,6 +1155,7 @@ def api_icebreak(req: IceReq):
         f"{p}\n\n【TA 的名字】{ta.name}\n\n【TA 的灵魂档案】\n{ta.persona}\n\n"
         f"【用户的自我介绍】\n{req.intro}\n\n【两个分身的对话记录】\n{convo}"
     )
+    _event("icebreak", name=ta.name)
     return {"ok": True, "card": card, "ta_name": ta.name}
 
 
@@ -1181,6 +1193,7 @@ def api_match(req: MatchReq):
         f"补充事实：TA 能读到的公开创作只有 {len(ta.library)} 条"
         f"（约 {_lib_chars(ta.library)} 字），卡片上要如实标出这件事。")
     # ⚠️ 标题由前端渲染（带两个名字）——模型不用再写一遍，避免卡上出现两个标题
+    _event("match", uid=(req.user_id or "")[:24], name=ta.name)
     return {"ok": True, "card": card, "ta_name": ta.name, "me_name": me_name,
             "ta_count": len(ta.library)}
 
@@ -1286,7 +1299,8 @@ def api_me_save(req: MeReq, request: Request):
         }
 
     _save_json(path, rec)
-    _event("me", mode=rec.get("mode"), n=rec.get("count"))
+    # 区分「首次建」和「后来改」—— 改说明用户在意自己的档案（更强的参与信号）
+    _event("me_edit" if old else "me", mode=rec.get("mode"), n=rec.get("count"))
     return {"ok": True, **rec}
 
 
@@ -1346,6 +1360,7 @@ def oauth_callback(authorization_code: str = "", code: str = "", state: str = ""
         profile = oauth.fetch_user(token)
     except Exception as e:
         return RedirectResponse("/?oauth=err&msg=" + urllib.parse.quote(str(e)[:120]))
+    _event("oauth_login")
     sid = oauth.new_session(token, expires_in, profile)
     resp = RedirectResponse("/?oauth=ok")
     resp.set_cookie(COOKIE, sid, httponly=True, samesite="lax", max_age=expires_in)

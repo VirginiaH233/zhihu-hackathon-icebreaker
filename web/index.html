@@ -1252,7 +1252,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
   <div class="foot">
     <div>社恐破冰船 · 盐之有理</div>
     <div class="q" style="margin-top:6px">分身基于公开内容构建，不代表本人想法 · 我们做连接，不做评价</div>
-    <a class="feed" href="https://www.zhihu.com/hackathon/project/120040?activity_code=zhihu_hackathon_2026_p2"
+    <a class="feed" onclick="_evt('feedback')" href="https://www.zhihu.com/hackathon/project/120040?activity_code=zhihu_hackathon_2026_p2"
        target="_blank" rel="noopener">用得不顺手？去项目页评论区说两句 →</a>
   </div>
 </div>
@@ -1358,7 +1358,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
         <div id="d-history"><div class="hint">读取中…</div></div>
       </div>
 
-      <a class="feed" href="https://www.zhihu.com/hackathon/project/120040?activity_code=zhihu_hackathon_2026_p2"
+      <a class="feed" onclick="_evt('feedback')" href="https://www.zhihu.com/hackathon/project/120040?activity_code=zhihu_hackathon_2026_p2"
          target="_blank" rel="noopener" style="display:block; margin:14px 0 4px">有想法？去项目页评论区说两句 →</a>
     </div>
 
@@ -1416,6 +1416,14 @@ function toast(msg, ms = 2200) {
 const jpost = (url, data) => fetch(url, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
 }).then(r => r.json());
+
+/** 前端埋点：上报「后端看不到的用户动作」（复制、保存、A2A、点反馈…）。
+ *  失败绝不影响用户操作，所以整个包在 try 里、不 await。 */
+function _evt(kind, extra) {
+  try {
+    jpost('/api/event', Object.assign({ kind: kind, user_id: uid }, extra || {}));
+  } catch (e) {}
+}
 
 /* ============================================================
    幕 1：两步找人
@@ -1925,6 +1933,7 @@ async function dlCard(scale) {
       try {
         await navigator.share({ files: [new File([blob], fname, { type: "image/png" })], title: "我的知乎人格分享卡" });
         toast("图片已保存");
+        _evt('share_save', { name: (cardData && cardData.name) || '' });
         tip.textContent = "✓ 已打开分享面板（选「存储图像」保存）";
         return;
       } catch (e) {
@@ -1938,6 +1947,7 @@ async function dlCard(scale) {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
     toast("图片已保存");
+    _evt('share_save', { name: (cardData && cardData.name) || '' });
     tip.textContent = "✓ 已保存（" + c.width + "×" + c.height + "）";
   } catch (e) {
     tip.textContent = "保存没成功，再试一次";
@@ -1945,6 +1955,7 @@ async function dlCard(scale) {
 }
 
 async function startDuel() {
+  _evt('duel');          // 埋点：用户主动玩了 A2A 彩蛋（差异化功能的真实使用率）
   const introEl = $('intro');
   const intro = (introEl && introEl.value ? introEl.value : '').trim();
   myName = myNameFromZhihu();
