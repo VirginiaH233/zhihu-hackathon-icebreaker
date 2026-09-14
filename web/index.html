@@ -472,24 +472,24 @@ button.share { background: linear-gradient(135deg, #ff8a63, #ff7a59); border-col
 .modal { display: none; position: fixed; inset: 0; z-index: 60; background: rgba(28,26,24,.55);
   backdrop-filter: blur(3px); padding: 22px 16px; overflow-y: auto; }
 .modal.show { display: flex; align-items: flex-start; justify-content: center; }
-.modal-inner { background: var(--paper); border-radius: 18px; padding: 16px; width: 100%; max-width: 452px;
+.modal-inner { background: #1E2B3A; border-radius: 18px; padding: 16px; width: 100%; max-width: 452px;
   box-shadow: 0 24px 60px rgba(20,20,20,.3); margin: auto; }
 .modal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.modal-top span { font-size: 14px; font-weight: 700; }
-.modal-top .x { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: #5b6470; font-size: 16px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.modal-top span { font-size: 14px; font-weight: 700; color: #E8EEF4; }
+.modal-top .x { width: 32px; height: 32px; border-radius: 50%; border: 1px solid #3A4C60; background: #2A3B4F; color: #E8EEF4; font-size: 16px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
 .modal-body { display: flex; justify-content: center; }
 .modal-body svg { width: 100%; height: auto; max-width: 420px; display: block; border-radius: 18px;
   box-shadow: 0 12px 34px rgba(30,30,30,.12); }
 .modal-foot { display: flex; gap: 9px; margin-top: 14px; }
 .modal-foot button { flex: 1; font: inherit; font-size: 13.5px; padding: 11px 12px; border-radius: 11px;
-  border: 1px solid var(--ink); background: var(--ink); color: #fff; cursor: pointer; }
+  border: 1px solid #ff7a59; background: #ff7a59; color: #fff; cursor: pointer; }
 .modal-foot button.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
-.modal-tip { font-size: 11.5px; color: var(--sub); margin-top: 10px; line-height: 1.65; }
+.modal-tip { font-size: 11.5px; color: #AAB8C6; margin-top: 10px; line-height: 1.65; }
 .modal-loading { padding: 48px 0; text-align: center; }
-.modal-loading .spin { width: 30px; height: 30px; border: 3px solid #efeae1; border-top-color: #ff7a59; border-radius: 50%; margin: 0 auto; animation: cards pin 0.8s linear infinite; }
-@keyframes cards pin { to { transform: rotate(360deg); } }
-.modal-loading .t1 { margin-top: 16px; color: #4a5260; font-size: 15px; font-weight: 600; }
-.modal-loading .t2 { margin-top: 6px; color: #9aa3b0; font-size: 12px; }
+.modal-loading .spin { width: 30px; height: 30px; border: 3px solid #3A4C60; border-top-color: #ff7a59; border-radius: 50%; margin: 0 auto; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.modal-loading .t1 { margin-top: 16px; color: #E8EEF4; font-size: 15px; font-weight: 600; }
+.modal-loading .t2 { margin-top: 6px; color: #AAB8C6; font-size: 12px; }
 
 .thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--sub); padding: 8px 0; flex-wrap: wrap; }
 .thinking .t { color: var(--ink-soft); font-weight: 600; }
@@ -1266,8 +1266,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
     </div>
     <div class="modal-body" id="card-stage"></div>
     <div class="modal-foot">
-      <button onclick="dlCard(2)">保存图片（高清）</button>
-      <button class="ghost" onclick="dlCard(1)">普通尺寸</button>
+      <button onclick="dlCard(2)">保存图片</button>
     </div>
     <p class="modal-tip" id="card-tip">手机上点「保存」会打开系统分享面板，选「存储图像」即可。</p>
   </div>
@@ -1766,6 +1765,7 @@ function _wrap(text, perLine, maxLines) {
 }
 
 /** 用纯 SVG 拼出卡片（布局按内容累加，高度自适应，底部永远留白） */
+let _cardQR = null;   // 二维码在卡片上的位置（导出时单独补画：iOS 的 SVG→canvas 会丢 data URI image）
 function buildCardSVG(d) {
   const PAD = 30, W = 420, n = Math.max(3, Math.min(5, d.axes.length));
   const axes = d.axes.slice(0, n), vals = d.values.slice(0, n).map(v => Math.max(.25, Math.min(1, +v || .5)));
@@ -1835,12 +1835,14 @@ function buildCardSVG(d) {
   y += 22;
 
   const QR = 80;
-  const qrBlock = (d.qr ? `<image x="${PAD}" y="${y}" width="${QR}" height="${QR}" xlink:href="${d.qr}" href="${d.qr}"/>` : "")
+  const _qrY = y;   // 二维码的 y（导出时单独补画用）
+  const qrBlock = (d.qr ? `<image class="qr" x="${PAD}" y="${y}" width="${QR}" height="${QR}" xlink:href="${d.qr}" href="${d.qr}"/>` : "")
     + `<text x="${PAD + QR + 16}" y="${y + 30}" font-size="14.5" font-weight="700" fill="#22262b" font-family='${CARD_FONT}'>扫码看看你的知乎人格</text>`
     + `<text x="${PAD + QR + 16}" y="${y + 53}" font-size="12" fill="#7b8492" font-family='${CARD_FONT}'>读你的公开创作 → 生成你的分身</text>`
     + `<text x="${PAD + QR + 16}" y="${y + 72}" font-size="11" fill="#b3aca0" font-family='${CARD_FONT}'>免费玩 · 一分钟出结果</text>`;
   y += QR;
   const H = y + 34;
+  _cardQR = d.qr ? { x: PAD, y: _qrY, size: QR, data: d.qr } : null;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
   <rect width="${W}" height="${H}" rx="18" fill="#fffdf9"/>
@@ -1880,6 +1882,8 @@ function renderCardCanvas(scale) {
     if (!svg) return reject(new Error("没有卡片"));
     const vb = _cvb(svg), W = +vb[2], H = +vb[3];
     const clone = svg.cloneNode(true);
+    const qrEl = clone.querySelector('image.qr');
+    if (qrEl) qrEl.remove();   // 二维码导出时单独补画（iOS 上 SVG 里的 data URI image 不渲染）
     clone.setAttribute("width", W); clone.setAttribute("height", H);
     const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)],
       { type: "image/svg+xml;charset=utf-8" }));
@@ -1888,10 +1892,16 @@ function renderCardCanvas(scale) {
       const c = document.createElement("canvas");
       c.width = W * scale; c.height = H * scale;
       const ctx = c.getContext("2d");
-      ctx.fillStyle = "#fffdf9"; ctx.fillRect(0, 0, c.width, c.height);   // 铺不透明底，避免存出来变黑
+      ctx.fillStyle = "#fffdf9"; ctx.fillRect(0, 0, c.width, c.height);
       ctx.drawImage(img, 0, 0, c.width, c.height);
       URL.revokeObjectURL(url);
-      resolve(c);
+      // 单独补画二维码（iOS 的 SVG→canvas 会丢 data URI image，这里手动画上去）
+      if (_cardQR && _cardQR.data) {
+        const qimg = new Image();
+        qimg.onload = () => { ctx.drawImage(qimg, _cardQR.x * scale, _cardQR.y * scale, _cardQR.size * scale, _cardQR.size * scale); resolve(c); };
+        qimg.onerror = () => resolve(c);
+        qimg.src = _cardQR.data;
+      } else { resolve(c); }
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("SVG 转图片失败")); };
     img.src = url;
@@ -1912,6 +1922,7 @@ async function dlCard(scale) {
     if (navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: "image/png" })] })) {
       try {
         await navigator.share({ files: [new File([blob], fname, { type: "image/png" })], title: "我的知乎人格分享卡" });
+        toast("图片已保存");
         tip.textContent = "✓ 已打开分享面板（选「存储图像」保存）";
         return;
       } catch (e) {
@@ -1924,6 +1935,7 @@ async function dlCard(scale) {
     a.download = fname; a.href = url;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast("图片已保存");
     tip.textContent = "✓ 已保存（" + c.width + "×" + c.height + "）";
   } catch (e) {
     tip.textContent = "保存没成功，再试一次";
