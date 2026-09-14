@@ -978,8 +978,9 @@ class DuelReq(BaseModel):
 class IceReq(BaseModel):
     session_id: str
     intro: str
-    dialogue: list
+    dialogue: list                    # 用户本人 × TA 分身聊的（主路径，最真实）
     user_id: str = ""                # 埋点归属：破冰卡是流程最后一步，最值钱，必须能算到人
+    duel: list = []                   # 两个分身之间聊的（A2A 彩蛋，可选）
 
 
 def sse(obj: dict) -> str:
@@ -1046,7 +1047,8 @@ class CommentReq(BaseModel):
     session_id: str
     user_id: str = ""                # 记「聊过谁」用
     topic: str = ""
-    dialogue: list = []              # 这场聊天（[{name, text}]）—— 只用来判断「他想问什么」
+    dialogue: list = []              # 用户本人 × TA 分身聊的（[{name,text}]）—— 他最真实想问的
+    duel: list = []                  # 两个分身之间聊的（A2A 彩蛋，可选）
     n: int = 3
 
 
@@ -1109,13 +1111,19 @@ def api_comment(req: CommentReq):
 
     lib_text = "\n".join(f"[{i}] 《{d['title']}》\n    摘要：{d.get('summary', '')}" for i, d in cands)
     convo = "\n".join(f"{t.get('name', '')}：{t.get('text', '')}" for t in (req.dialogue or [])[-8:])
+    duel_txt = "\n".join(f"{t.get('name', '')}：{t.get('text', '')}" for t in (req.duel or [])[-6:])
+    my_rec = _load_json(USERS_DIR / f"{_safe_key(req.user_id)}.json", None) if req.user_id else None
+    my_lib = (my_rec or {}).get("library", []) if my_rec else []
+    my_lib_txt = "\n".join(f"- {x.get('title','')}" for x in (my_lib or [])[:8])
 
     p = (ROOT / "prompts" / "5-评论.md").read_text(encoding="utf-8")
     p = p.split("---", 2)[2].strip() if p.startswith("---") else p
     raw = cli_answer(
         f"{p}\n\n【TA 的名字】{ta.name}\n\n【候选内容】\n{lib_text}\n\n"
         f"【这个用户刚聊过的话题】{req.topic or '（没指定）'}\n\n"
-        f"【刚刚这场对话（只用来判断他想问什么，绝不能当 TA 说过的话）】\n{convo or '（没聊几句）'}"
+        f"【你自己（用户本人）写过的东西，标题列表】\n{my_lib_txt or '（无——用户没授权，或没写东西）'}\n\n"
+        f"【你（用户本人）和 TA 的分身聊的 —— 这是他本人亲口问的】\n{convo or '（没聊几句）'}\n\n"
+        f"【两个分身之间聊的（只用来判断 TA 的脾气，不是 TA 说过的话）】\n{duel_txt or '（没玩）'}"
     )
 
     _record_history(req.user_id, ta.name, topic=req.topic, comment=True)
@@ -1226,15 +1234,26 @@ def api_icebreak(req: IceReq):
     ta = _get_session(req.session_id)
     if not ta:
         return {"ok": False, "error": "会话已失效，请重新开始"}
-    if not req.dialogue:
-        return {"ok": False, "error": "还没有对话记录"}
+    if not req.dialogue and not req.duel:
+        return {"ok": False, "error": "还没有对话记录 —— 先跟 TA 的分身聊几句吧"}
 
     p = (ROOT / "prompts" / "4-破冰卡.md").read_text(encoding="utf-8")
     p = p.split("---", 2)[2].strip() if p.startswith("---") else p
-    convo = "\n".join(f"「{t['name']}」：{t['text']}" for t in req.dialogue)
+    convo = "\n".join(f"「{t['name']}」：{t['text']}" for t in (req.dialogue or []))
+    duel_txt = "\n".join(f"「{t['name']}」：{t['text']}" for t in (req.duel or []))
+    # 用户自己的档案（授权读过创作的人才有；没授权就留空，模型按「无」处理）
+    my_rec = _load_json(USERS_DIR / f"{_safe_key(req.user_id)}.json", None) if req.user_id else None
+    my_persona = (my_rec or {}).get("persona", "") if my_rec else ""
+    my_lib = (my_rec or {}).get("library", []) if my_rec else []
+    my_lib_txt = "\n".join(f"- {x.get('title','')}" for x in (my_lib or [])[:6])
+
     card = cli_answer(
         f"{p}\n\n【TA 的名字】{ta.name}\n\n【TA 的灵魂档案】\n{ta.persona}\n\n"
-        f"【用户的自我介绍】\n{req.intro}\n\n【两个分身的对话记录】\n{convo}"
+        f"【用户自己的档案（他本人写过/在意什么）】\n{my_persona or '（用户没授权读创作，无）'}\n\n"
+        f"【用户自己写过的东西（标题）】\n{my_lib_txt or '（无）'}\n\n"
+        f"【用户的自我介绍】\n{req.intro}\n\n"
+        f"【你（用户本人）和 TA 的分身聊的 —— 这是他本人亲口问的，最重要】\n{convo or '（没聊）'}\n\n"
+        f"【两个分身之间聊的（信息隔离下的试探，用来判断 TA 的脾气，不是 TA 说过的话）】\n{duel_txt or '（没玩这个彩蛋）'}"
     )
     _event("icebreak", uid=(req.user_id or "")[:24], name=ta.name)
     return {"ok": True, "card": card, "ta_name": ta.name}

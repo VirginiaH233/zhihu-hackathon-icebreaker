@@ -62,11 +62,15 @@ INTRO = """我是一个在中国做产品的人，业余喜欢研究各种小众
 我想认识一个把「玩」当正事做的人，想知道你是怎么把兴趣变成专业的。"""
 
 
+# ⚠️ 绕过系统代理：本机代理对 localhost 请求会瞬时 502（部署时真踩过，导致误判「测试没过」）。
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def post(path, data, timeout=900):
     req = urllib.request.Request(
         BASE + path, data=json.dumps(data).encode("utf-8"),
         headers={"Content-Type": "application/json"})
-    return urllib.request.urlopen(req, timeout=timeout)
+    return _OPENER.open(req, timeout=timeout)
 
 
 def main():

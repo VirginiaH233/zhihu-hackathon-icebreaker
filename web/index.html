@@ -1390,7 +1390,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
 
 <script>
 const $ = id => document.getElementById(id);
-let sid = null, taName = '', taSig = '', myName = '我', introText = '', dialogue = [];
+let sid = null, taName = '', taSig = '', myName = '我', introText = '', dialogue = [], myTalk = [];
 let taMode = 'soul';      // soul=TA 有真材料（做分身对谈）；profile=素材太薄（改出匹配卡）
 let taTooThin = false;    // 薄到读不出关注点 → 请用户补一句「我了解的 TA」
 const STORE = {};
@@ -2148,7 +2148,7 @@ async function startTalk() {
   $('talk-log').innerHTML = '';
   $('talk-topics').innerHTML = '';
   $('talk-wheel').style.display = 'none';
-  dialogue = []; talkRounds = 0; curTopic = '';
+  dialogue = []; myTalk = []; talkRounds = 0; curTopic = '';
   openData = null; shownTopics = []; usedTopics = [];
   $('stage-talk').scrollIntoView({ behavior: 'smooth', block: 'start' });
   await loadOpening();
@@ -2298,6 +2298,7 @@ async function sendTalk() {
   const b = $('btn-talk-send');
   inp.value = ''; b.disabled = true;
   addMsg('me', v, '', '你', 'talk-log');
+  myTalk.push({ name: '你', text: v });
   const t = showThinking(taName + ' 的分身 正在想…', 'talk-log', 'talk');
   try {
     const d = await jpost('/api/chat', { session_id: sid, user_id: uid, message: v, topic: curTopic });
@@ -2306,6 +2307,7 @@ async function sendTalk() {
     // 依据优先用模型自己写的（接口已拆好）；没有才退回检索命中
     const ev = d.evidence || (d.hits || []).map(x => '[' + x.id + ']').join('、');
     addMsg('ta', d.reply, ev, taName, 'talk-log');
+    myTalk.push({ name: taName, text: d.reply });
     talkRounds++;
     if (talkRounds === 5) {
       addMsg('sys', '聊得差不多了？点下面「我聊完了」，我帮你把想说的那句话整理出来。', '', '', 'talk-log');
@@ -2399,7 +2401,7 @@ async function makeComment(topic) {
   box.innerHTML = '<div class="tk-lb">正在写评论<span>只引 TA 公开写过的内容，每条都挂着出处</span></div>';
   const busy = showBusy('talk-topics', 'comment', '正在写');
   try {
-    const d = await jpost('/api/comment', { session_id: sid, user_id: uid, topic, dialogue });
+    const d = await jpost('/api/comment', { session_id: sid, user_id: uid, topic, dialogue: myTalk, duel: dialogue });
     busy.stop();
     if (!d.ok) { toast(d.error || '没写出来，再试一次', 3800); finishTalkToComment(); return; }
     renderComments(d, topic);
@@ -2487,7 +2489,7 @@ async function makeCard() {
   $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const busy = showBusy('ice-card', 'card', '正在写这张卡');
   try {
-    const d = await jpost('/api/icebreak', { session_id: sid, user_id: uid, intro: introText, dialogue });
+    const d = await jpost('/api/icebreak', { session_id: sid, user_id: uid, intro: introText, dialogue: myTalk, duel: dialogue });
     busy.stop();
     if (!d.ok) { toast(d.error); $('ice-card').innerHTML = '<div class="hint">没写出来：' + esc(d.error || '再试一次') + '</div>'; return; }
     renderIce(d.card, d.ta_name || taName);
