@@ -1917,9 +1917,11 @@ async function dlCard(scale) {
     const c = await renderCardCanvas(scale);
     const blob = await new Promise(r => c.toBlob(r, "image/png"));
     const fname = "知乎人格-" + (cardData && cardData.name ? cardData.name : "我") + ".png";
-    // 手机（iOS/Android）优先走系统分享面板 —— 选「存储图像」就能存相册，
-    // 这条路比 a.download 可靠得多（iOS Safari 对 a.download 支持很差）。
-    if (navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: "image/png" })] })) {
+    // 只在手机/平板上走系统分享面板（iOS 上 a.download 无效、要靠「存储图像」）；
+    // 电脑（含 Windows/Mac）直接下载 —— navigator.share 在桌面会弹系统分享框，反而绕远路。
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+      || (navigator.maxTouchPoints > 1 && window.innerWidth < 768);
+    if (isMobile && navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: "image/png" })] })) {
       try {
         await navigator.share({ files: [new File([blob], fname, { type: "image/png" })], title: "我的知乎人格分享卡" });
         toast("图片已保存");
