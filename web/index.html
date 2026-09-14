@@ -1837,7 +1837,7 @@ function buildCardSVG(d) {
   const QR = 80;
   const _qrY = y;   // 二维码的 y（导出时单独补画用）
   const qrBlock = (d.qr ? `<image class="qr" x="${PAD}" y="${y}" width="${QR}" height="${QR}" xlink:href="${d.qr}" href="${d.qr}"/>` : "")
-    + `<text x="${PAD + QR + 16}" y="${y + 30}" font-size="14.5" font-weight="700" fill="#22262b" font-family='${CARD_FONT}'>扫码看看你的知乎人格</text>`
+    + `<text x="${PAD + QR + 16}" y="${y + 30}" font-size="14.5" font-weight="700" fill="#22262b" font-family='${CARD_FONT}'>打开<tspan fill="#ff7a59">知乎APP</tspan>扫码</text>`
     + `<text x="${PAD + QR + 16}" y="${y + 53}" font-size="12" fill="#7b8492" font-family='${CARD_FONT}'>读你的公开创作 → 生成你的分身</text>`
     + `<text x="${PAD + QR + 16}" y="${y + 72}" font-size="11" fill="#b3aca0" font-family='${CARD_FONT}'>免费玩 · 一分钟出结果</text>`;
   y += QR;
