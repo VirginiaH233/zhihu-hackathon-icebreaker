@@ -881,8 +881,16 @@ def api_sharecard(req: ShareReq):
 
     **只在用户点「生成分享卡」时才调**（不点不花钱）。没有档案就用 ME 的兜底。
     """
-    uid = _safe_key(req.user_id)
-    rec = _load_json(USERS_DIR / f"{uid}.json", None) if req.user_id else None
+    # 先挡空/非法 user_id —— 否则 _safe_key 会抛，FastAPI 回 400（前端拿到的是 HTTP 错误
+    # 而不是 {"ok": false}，不好处理）。前端在没建档时也会带空 uid 试一次。
+    if not (req.user_id or "").strip():
+        return {"ok": False, "error": "还没有你的档案 —— 先生成一次你的分身"}
+    try:
+        uid = _safe_key(req.user_id)
+    except Exception:
+        return {"ok": False, "error": "还没有你的档案 —— 先生成一次你的分身"}
+
+    rec = _load_json(USERS_DIR / f"{uid}.json", None)
     persona = (rec or {}).get("persona") or ""
     if not persona.strip():
         return {"ok": False, "error": "还没有你的档案 —— 先生成一次你的分身"}
