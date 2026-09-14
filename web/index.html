@@ -467,6 +467,25 @@ button.wide { width: 100%; }
 }
 .pop-close:hover { color: var(--ink); border-color: var(--ink-soft); }
 
+/* ---------- 分享卡 ---------- */
+button.share { background: linear-gradient(135deg, #ff8a63, #ff7a59); border-color: transparent; color: #fff; }
+.modal { display: none; position: fixed; inset: 0; z-index: 60; background: rgba(28,26,24,.55);
+  backdrop-filter: blur(3px); padding: 22px 16px; overflow-y: auto; }
+.modal.show { display: flex; align-items: flex-start; justify-content: center; }
+.modal-inner { background: var(--paper); border-radius: 18px; padding: 16px; width: 100%; max-width: 452px;
+  box-shadow: 0 24px 60px rgba(20,20,20,.3); margin: auto; }
+.modal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.modal-top span { font-size: 14px; font-weight: 700; }
+.modal-top .x { font: inherit; font-size: 16px; line-height: 1; background: none; border: 0; cursor: pointer; color: var(--sub); padding: 4px 6px; }
+.modal-body { display: flex; justify-content: center; }
+.modal-body svg { width: 100%; height: auto; max-width: 420px; display: block; border-radius: 18px;
+  box-shadow: 0 12px 34px rgba(30,30,30,.12); }
+.modal-foot { display: flex; gap: 9px; margin-top: 14px; }
+.modal-foot button { flex: 1; font: inherit; font-size: 13.5px; padding: 11px 12px; border-radius: 11px;
+  border: 1px solid var(--ink); background: var(--ink); color: #fff; cursor: pointer; }
+.modal-foot button.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
+.modal-tip { font-size: 11.5px; color: var(--sub); margin-top: 10px; line-height: 1.65; }
+
 .thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--sub); padding: 8px 0; flex-wrap: wrap; }
 .thinking .t { color: var(--ink-soft); font-weight: 600; }
 .thinking .h { font-size: 12.5px; color: var(--sub); }
@@ -1210,6 +1229,22 @@ try {
   </div>
 </div>
 
+<!-- ========== 分享卡弹窗 ========== -->
+<div class="modal" id="card-modal">
+  <div class="modal-inner">
+    <div class="modal-top">
+      <span>你的分享卡</span>
+      <button class="x" onclick="closeCard()">✕</button>
+    </div>
+    <div class="modal-body" id="card-stage"></div>
+    <div class="modal-foot">
+      <button onclick="dlCard(2)">保存图片（高清）</button>
+      <button class="ghost" onclick="dlCard(1)">普通尺寸</button>
+    </div>
+    <p class="modal-tip" id="card-tip">手机上如果点按钮没反应，长按下面的图保存即可。</p>
+  </div>
+</div>
+
 <!-- ========== 个人中心抽屉 ========== -->
 <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
 <aside class="drawer" id="drawer">
@@ -1232,6 +1267,7 @@ try {
         <div class="soul-rendered" id="d-persona-rendered"></div>
         <div class="row" style="margin-top:14px">
           <button class="ghost" onclick="togglePersonaEdit(true)">✏️ 编辑档案</button>
+          <button class="share" onclick="makeShareCard()">📤 生成分享卡</button>
         </div>
       </div>
       <!-- 编辑态 -->
@@ -1674,6 +1710,159 @@ function toggleSoul() {
 function myNameFromZhihu() {
   const p = (ZHIHU && ZHIHU.profile) || {};
   return String(p.fullname || '').trim() || (ME && ME.name) || '我';
+}
+
+/* ============================================================
+   分享卡：把我的档案变成一张能发出去的图（纯 SVG，导出无损）
+   ============================================================ */
+let cardData = null;
+
+const CARD_FONT = '-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+const _cvb = (svg) => (svg.getAttribute("viewBox") || "0 0 420 728").split(/\s+/);
+const _esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** 中文字在 SVG 里不会自动换行，按字符数折 */
+function _wrap(text, perLine, maxLines) {
+  const out = []; let buf = "";
+  for (const ch of text) {
+    buf += ch;
+    if (buf.length >= perLine) { out.push(buf); buf = ""; if (out.length >= maxLines) break; }
+  }
+  if (buf && out.length < maxLines) out.push(buf);
+  if (out.length === maxLines && out.join("").length < text.length) {
+    out[maxLines - 1] = out[maxLines - 1].slice(0, perLine - 1) + "…";
+  }
+  return out;
+}
+
+/** 用纯 SVG 拼出卡片（布局按内容累加，高度自适应，底部永远留白） */
+function buildCardSVG(d) {
+  const PAD = 30, W = 420, n = Math.max(3, Math.min(5, d.axes.length));
+  const axes = d.axes.slice(0, n), vals = d.values.slice(0, n).map(v => Math.max(.25, Math.min(1, +v || .5)));
+  const cx = W / 2, cy = 300, R = 78;
+
+  const ring = (k) => {
+    let o = [];
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + i * Math.PI * 2 / n;
+      o.push((cx + R * k * Math.cos(a)).toFixed(1) + "," + (cy + R * k * Math.sin(a)).toFixed(1));
+    }
+    return o.join(" ");
+  };
+  const dataPoly = vals.map((v, i) => {
+    const a = -Math.PI / 2 + i * Math.PI * 2 / n;
+    return (cx + R * v * Math.cos(a)).toFixed(1) + "," + (cy + R * v * Math.sin(a)).toFixed(1);
+  }).join(" ");
+
+  let y = 30;
+  const head = `
+    <text x="${PAD}" y="${y + 16}" font-size="16.5" font-weight="800" fill="#ff7a59" font-family='${CARD_FONT}'>社恐破冰船</text>
+    <text x="${PAD}" y="${y + 37}" font-size="11.5" fill="#9aa3b0" font-family='${CARD_FONT}'>知乎黑客松参赛作品 · 帮你开口认识一个人</text>
+    <line x1="${PAD}" y1="${y + 52}" x2="${W - PAD}" y2="${y + 52}" stroke="#efeae1"/>`;
+  y += 82;
+
+  const ident = `
+    <text x="${PAD}" y="${y}" font-size="11" fill="#b3aca0" letter-spacing="1.2" font-family='${CARD_FONT}'>知乎人格档案</text>
+    <text x="${PAD}" y="${y + 34}" font-size="27" font-weight="800" fill="#22262b" font-family='${CARD_FONT}'>${_esc(d.name)}</text>
+    <text x="${PAD}" y="${y + 56}" font-size="12" fill="#7b8492" font-family='${CARD_FONT}'>由 TA 在知乎的公开创作读出</text>`;
+  y += 102;
+
+  const radar = [1, .66, .34].map(k => `<polygon points="${ring(k)}" fill="none" stroke="#ece7de" stroke-width="1"/>`).join("")
+    + axes.map((_, i) => {
+      const a = -Math.PI / 2 + i * Math.PI * 2 / n;
+      return `<line x1="${cx}" y1="${cy}" x2="${(cx + R * Math.cos(a)).toFixed(1)}" y2="${(cy + R * Math.sin(a)).toFixed(1)}" stroke="#efeae1" stroke-width="1"/>`;
+    }).join("")
+    + `<polygon points="${dataPoly}" fill="rgba(255,122,89,.22)" stroke="#ff7a59" stroke-width="2"/>`
+    + vals.map((v, i) => {
+      const a = -Math.PI / 2 + i * Math.PI * 2 / n;
+      return `<circle cx="${(cx + R * v * Math.cos(a)).toFixed(1)}" cy="${(cy + R * v * Math.sin(a)).toFixed(1)}" r="3.2" fill="#ff7a59"/>`;
+    }).join("")
+    + axes.map((t, i) => {
+      const a = -Math.PI / 2 + i * Math.PI * 2 / n;
+      return `<text x="${(cx + (R + 27) * Math.cos(a)).toFixed(1)}" y="${(cy + (R + 27) * Math.sin(a) + 4).toFixed(1)}" font-size="11.5" fill="#5b6470" text-anchor="middle" font-family='${CARD_FONT}'>${_esc(t)}</text>`;
+    }).join("");
+  y = cy + R + 27 + 26;
+
+  const sep1 = `<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#e6e2da" stroke-dasharray="4 4"/>`;
+  y += 32;
+
+  const qLines = _wrap(d.quote || "", 24, 3);
+  const quote = qLines.map((l, i) => `<text x="${PAD}" y="${y + i * 27}" font-size="16" fill="#22262b" font-family='${CARD_FONT}'>${_esc(l)}</text>`).join("");
+  y += (qLines.length - 1) * 27 + 40;
+
+  let tx = PAD, ty = y, pills = "";
+  (d.tags || []).slice(0, 6).forEach((t, i) => {
+    const w = t.length * 12.5 + 24;
+    if (tx + w > W - PAD) { tx = PAD; ty += 34; }
+    const hot = i < 2;
+    pills += `<rect x="${tx}" y="${ty - 15}" width="${w.toFixed(0)}" height="27" rx="13.5" fill="${hot ? "rgba(255,122,89,.1)" : "#ffffff"}" stroke="${hot ? "rgba(255,122,89,.32)" : "#e6e2da"}" stroke-width="1"/>`
+      + `<text x="${(tx + w / 2).toFixed(0)}" y="${ty + 2.5}" font-size="12" fill="${hot ? "#c9542f" : "#4a5260"}" text-anchor="middle" font-family='${CARD_FONT}'>${_esc(t)}</text>`;
+    tx += w + 8;
+  });
+  y = ty + 28;
+
+  const sep2 = `<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#e6e2da" stroke-dasharray="4 4"/>`;
+  y += 22;
+
+  const QR = 80;
+  const qrBlock = (d.qr ? `<image x="${PAD}" y="${y}" width="${QR}" height="${QR}" xlink:href="${d.qr}" href="${d.qr}"/>` : "")
+    + `<text x="${PAD + QR + 16}" y="${y + 30}" font-size="14.5" font-weight="700" fill="#22262b" font-family='${CARD_FONT}'>扫码看看你的知乎人格</text>`
+    + `<text x="${PAD + QR + 16}" y="${y + 53}" font-size="12" fill="#7b8492" font-family='${CARD_FONT}'>读你的公开创作 → 生成你的分身</text>`
+    + `<text x="${PAD + QR + 16}" y="${y + 72}" font-size="11" fill="#b3aca0" font-family='${CARD_FONT}'>免费玩 · 一分钟出结果</text>`;
+  y += QR;
+  const H = y + 34;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <rect width="${W}" height="${H}" rx="18" fill="#fffdf9"/>
+  <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="17.5" fill="none" stroke="#e6e2da"/>
+  ${head}${ident}${radar}${sep1}${quote}${pills}${sep2}${qrBlock}
+  <text x="${W - PAD}" y="${H - 13}" font-size="10" fill="#c9c2b6" text-anchor="end" font-family='${CARD_FONT}'>zhihu-hackathon-icebreaker</text>
+</svg>`;
+}
+
+function closeCard() { $('card-modal').classList.remove('show'); }
+
+async function makeShareCard() {
+  const stage = $('card-stage'), tip = $('card-tip');
+  $('card-modal').classList.add('show');
+  stage.innerHTML = '<p style="padding:40px 0;color:#7b8492;font-size:13px">正在读你的档案，画卡片…</p>';
+  tip.textContent = '生成后可以保存成图片，直接发出去。';
+  try {
+    const d = await jpost('/api/sharecard', { user_id: uid });
+    if (!d.ok) { stage.innerHTML = '<p style="padding:36px 0;color:#c9542f;font-size:13px">' + (d.error || '生成失败') + '</p>'; return; }
+    cardData = d;
+    stage.innerHTML = buildCardSVG(d);
+    tip.textContent = '手机上如果点按钮没反应，长按上面的卡片保存即可。';
+  } catch (e) {
+    stage.innerHTML = '<p style="padding:36px 0;color:#c9542f;font-size:13px">网络出了点问题，再试一次</p>';
+  }
+}
+
+/** 导出 PNG：SVG → canvas → 下载（先铺不透明底，避免存出来变黑） */
+async function dlCard(scale) {
+  const svg = $('card-stage').querySelector('svg');
+  if (!svg) return;
+  const vb = _cvb(svg), W = +vb[2], H = +vb[3];
+  const clone = svg.cloneNode(true);
+  clone.setAttribute("width", W); clone.setAttribute("height", H);
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)],
+    { type: "image/svg+xml;charset=utf-8" }));
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = W * scale; c.height = H * scale;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#fffdf9"; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    URL.revokeObjectURL(url);
+    const a = document.createElement("a");
+    a.download = "知乎人格-" + (cardData && cardData.name ? cardData.name : "我") + ".png";
+    a.href = c.toDataURL("image/png");
+    document.body.appendChild(a); a.click(); a.remove();
+    $('card-tip').textContent = "✓ 已保存（" + c.width + "×" + c.height + "）";
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); $('card-tip').textContent = "导出失败，长按卡片保存试试"; };
+  img.src = url;
 }
 
 async function startDuel() {

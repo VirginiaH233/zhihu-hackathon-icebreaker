@@ -10,6 +10,8 @@
     python server.py
     浏览器打开 http://127.0.0.1:8000
 """
+import base64
+import io
 import json
 import re
 import subprocess
@@ -144,6 +146,28 @@ BODY_LIMIT = 1200
 # v6（2026-09-14）：补「想法」的阈值从 <3 提到 <8 —— 取料结果变了，旧缓存（可能只
 #                   抓到三五条）必须重建，否则修了也白修。
 MATERIAL_VERSION = 6
+
+# 产品对外地址 —— 分享卡上的二维码指向它（带 ?from=card，将来能看扫码来源）。
+# 线上用环境变量覆盖；本地开发默认线上地址（本地二维码也扫得出、跳线上）。
+SITE_URL = os.environ.get(
+    "SITE_URL", "https://zhihu-hackathon-icebreaker-production.up.railway.app").rstrip("/")
+
+
+def make_qr_datauri(url: str) -> str:
+    """把链接画成二维码，返回 data:image/png;base64 —— 卡片导出时不依赖网络。"""
+    try:
+        import qrcode
+        from qrcode.constants import ERROR_CORRECT_M
+        q = qrcode.QRCode(error_correction=ERROR_CORRECT_M, box_size=10, border=1)
+        q.add_data(url)
+        q.make(fit=True)
+        img = q.make_image(fill_color="#22262b", back_color="white").convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception as e:
+        _ZHIHU_ERR["qr"] = f"{type(e).__name__}: {e}"[:120]
+        return ""
 
 
 def _search_items(query: str, count: int = 10, retries: int = 2) -> list:
@@ -815,6 +839,70 @@ def api_comment(req: CommentReq):
             "comments": comments,
             "parse_failed": not comments,
             "raw": raw[:1500] if not comments else ""}
+
+
+class ShareReq(BaseModel):
+    user_id: str
+
+
+def _parse_sharecard(raw: str) -> dict:
+    """解析 prompts/6-分享卡.md 的输出（【金句】/【标签】/【维度】）。"""
+    text = (raw or "").replace(chr(13), "")
+    out = {"quote": "", "tags": [], "axes": [], "values": []}
+
+    m = re.search(r"【金句】\s*(.+?)(?=\s*【|\Z)", text, re.S)
+    if m:
+        out["quote"] = re.sub(r"\s+", " ", m.group(1)).strip().strip("`「」“”")
+
+    m = re.search(r"【标签】\s*(.+?)(?=\s*【|\Z)", text, re.S)
+    if m:
+        out["tags"] = [t.strip() for t in m.group(1).strip().split("|") if t.strip()][:6]
+
+    m = re.search(r"【维度】\s*(.+?)(?=\s*【|\Z)", text, re.S)
+    if m:
+        for seg in m.group(1).strip().split("|"):
+            if "," not in seg:
+                continue
+            name, _, val = seg.rpartition(",")
+            try:
+                v = float(val.strip())
+            except ValueError:
+                continue
+            name = name.strip().strip("「」")
+            if name:
+                out["axes"].append(name)
+                out["values"].append(max(0.25, min(1.0, v)))
+    return out
+
+
+@app.post("/api/sharecard")
+def api_sharecard(req: ShareReq):
+    """把我的档案变成一张能发出去的卡（金句 + 标签 + 雷达图维度）。
+
+    **只在用户点「生成分享卡」时才调**（不点不花钱）。没有档案就用 ME 的兜底。
+    """
+    uid = _safe_key(req.user_id)
+    rec = _load_json(USERS_DIR / f"{uid}.json", None) if req.user_id else None
+    persona = (rec or {}).get("persona") or ""
+    if not persona.strip():
+        return {"ok": False, "error": "还没有你的档案 —— 先生成一次你的分身"}
+
+    name = (rec.get("name") or "我").strip() or "我"
+    p = (ROOT / "prompts" / "6-分享卡.md").read_text(encoding="utf-8")
+    p = p.split("---", 2)[2].strip() if p.startswith("---") else p
+    raw = cli_answer(f"{p}\n\n【TA 的名字】{name}\n\n【TA 的档案】\n{persona}")
+    got = _parse_sharecard(raw)
+
+    # 解析救不回来时，用档案兜底（至少给一张卡，不把用户卡死）
+    if not got["quote"] or len(got["axes"]) < 3:
+        return {"ok": False, "error": "卡片生成失败，请再点一次", "raw": raw[:600]}
+
+    # 二维码指向产品首页（带 from=card，将来能看有多少人是扫码来的）
+    qr = make_qr_datauri(SITE_URL + "/?from=card")
+    return {"ok": True, "name": name,
+            "quote": got["quote"], "tags": got["tags"][:5],
+            "axes": got["axes"][:5], "values": got["values"][:5],
+            "qr": qr, "site": SITE_URL}
 
 
 @app.post("/api/icebreak")
