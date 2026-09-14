@@ -3065,6 +3065,8 @@ async function checkOauth() {
         toast('已登录。直接搜一个人就能开聊 —— 想要自己的分身，点右上角', 4200);
       }
     } else {
+      // 登录前置（用户确认保持）：注册/登录数影响评审评分，而且这是通行做法 ——
+      // 登录门自己承担「勾人」职责（翻牌三张 + 一句钩子），不是干巴巴的墙。
       if (!_devLocal) gateShow(true);   // 未登录 → 只给登录门（本地开发豁免）
       try { localStorage.removeItem('gate_hint'); } catch (e) {}
       $('o-btn').style.display = 'inline-block';
@@ -3135,11 +3137,16 @@ function gateFlip(el){
   if (hint) hint.innerHTML = (n===0) ? _gateHintText[0] : _gateHintText[n];
 }
 async function zhihuLogin() {
+  // 点了就「唰」地跳走最让人没安全感 —— 先把按钮切成加载态，用户知道「它在动」。
+  const btn = $('gate-btn');
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '正在打开知乎授权…'; }
+  const restore = () => { if (btn) { btn.disabled = false; btn.textContent = label; } };
   try {
     const d = await (await fetch('/api/oauth/url')).json();
-    if (!d.ok) { toast(d.error); return; }
-    location.href = d.url;
-  } catch (e) { toast('出错：' + e.message); }
+    if (!d.ok) { toast(d.error || '登录服务暂时不可用'); restore(); return; }
+    location.href = d.url;        // 授权页在知乎那边，跳过去是必须的一步
+  } catch (e) { toast('网络出了点问题，再点一次试试'); restore(); }
 }
 /** 退出登录：清掉服务端会话。想换账号 → 退出后再点「登录」即可（分身的档案不受影响） */
 async function zhihuLogout() {
