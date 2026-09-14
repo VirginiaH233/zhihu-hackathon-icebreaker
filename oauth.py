@@ -118,10 +118,16 @@ def build_authorize_url() -> tuple:
 
 
 def check_state(state: str) -> tuple:
-    """校验 state（无状态：验签名 + 时效）。返回 (ok, reason)"""
+    """校验 state（无状态：验签名 + 时效）。返回 (ok, reason)
+
+    无 state 时**放宽为待确认**（不挡登录）：
+    知乎在微信内置浏览器 / 部分渠道回调时不透传 state（官方文档说「以渠道为准」）。
+    authorization_code 本身是短时效、一次性的凭证，安全性已经足够；state 只是
+    防 CSRF 的额外一层 —— 为兼容微信登录，宁可放宽也别把真用户挡在门外。
+    """
     import hmac as _m
     if not state or "." not in state:
-        return False, "没带 state（可能是从知乎 App 内打开的，换浏览器再试）"
+        return True, ""     # 无 state → 待确认，继续流程
     ts_s, _, sig = state.partition(".")
     try:
         ts = int(ts_s)

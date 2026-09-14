@@ -476,7 +476,7 @@ button.share { background: linear-gradient(135deg, #ff8a63, #ff7a59); border-col
   box-shadow: 0 24px 60px rgba(20,20,20,.3); margin: auto; }
 .modal-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .modal-top span { font-size: 14px; font-weight: 700; }
-.modal-top .x { font: inherit; font-size: 16px; line-height: 1; background: none; border: 0; cursor: pointer; color: var(--sub); padding: 4px 6px; }
+.modal-top .x { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: #5b6470; font-size: 16px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
 .modal-body { display: flex; justify-content: center; }
 .modal-body svg { width: 100%; height: auto; max-width: 420px; display: block; border-radius: 18px;
   box-shadow: 0 12px 34px rgba(30,30,30,.12); }
@@ -485,6 +485,11 @@ button.share { background: linear-gradient(135deg, #ff8a63, #ff7a59); border-col
   border: 1px solid var(--ink); background: var(--ink); color: #fff; cursor: pointer; }
 .modal-foot button.ghost { background: #fff; color: var(--ink); border-color: var(--line); }
 .modal-tip { font-size: 11.5px; color: var(--sub); margin-top: 10px; line-height: 1.65; }
+.modal-loading { padding: 48px 0; text-align: center; }
+.modal-loading .spin { width: 30px; height: 30px; border: 3px solid #efeae1; border-top-color: #ff7a59; border-radius: 50%; margin: 0 auto; animation: cards pin 0.8s linear infinite; }
+@keyframes cards pin { to { transform: rotate(360deg); } }
+.modal-loading .t1 { margin-top: 16px; color: #4a5260; font-size: 15px; font-weight: 600; }
+.modal-loading .t2 { margin-top: 6px; color: #9aa3b0; font-size: 12px; }
 
 .thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--sub); padding: 8px 0; flex-wrap: wrap; }
 .thinking .t { color: var(--ink-soft); font-weight: 600; }
@@ -1264,11 +1269,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
       <button onclick="dlCard(2)">保存图片（高清）</button>
       <button class="ghost" onclick="dlCard(1)">普通尺寸</button>
     </div>
-    <p class="modal-tip" id="card-tip">手机上如果点按钮没反应，长按下面的图保存即可。</p>
-    <div id="card-savable" style="display:none;margin-top:12px">
-      <div style="font-size:12px;color:var(--sub);margin-bottom:6px;text-align:center">↑ 长按这张图可以直接存到相册</div>
-      <img id="card-img" alt="我的知乎人格分享卡" style="width:100%;border-radius:14px;box-shadow:0 10px 30px rgba(30,30,30,.14)">
-    </div>
+    <p class="modal-tip" id="card-tip">手机上点「保存」会打开系统分享面板，选「存储图像」即可。</p>
   </div>
 </div>
 
@@ -1815,7 +1816,7 @@ function buildCardSVG(d) {
   const sep1 = `<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#e6e2da" stroke-dasharray="4 4"/>`;
   y += 32;
 
-  const qLines = _wrap(d.quote || "", 24, 3);
+  const qLines = _wrap(d.quote || "", 21, 3);
   const quote = qLines.map((l, i) => `<text x="${PAD}" y="${y + i * 27}" font-size="16" fill="#22262b" font-family='${CARD_FONT}'>${_esc(l)}</text>`).join("");
   y += (qLines.length - 1) * 27 + 40;
 
@@ -1852,25 +1853,23 @@ function buildCardSVG(d) {
 function closeCard() {
   $('card-modal').classList.remove('show');
   // 清掉上一张卡，免得下次打开先闪一眼旧图
-  $('card-savable').style.display = 'none';
-  $('card-img').removeAttribute('src');
+
   cardData = null;
 }
 
 async function makeShareCard() {
   const stage = $('card-stage'), tip = $('card-tip');
   $('card-modal').classList.add('show');
-  stage.innerHTML = '<p style="padding:40px 0;color:#7b8492;font-size:13px">正在读你的档案，画卡片…</p>';
+  stage.innerHTML = '<div class="modal-loading"><div class="spin"></div><p class="t1">正在读你的档案，画卡片…</p><p class="t2">一般几秒钟就好</p></div>';
   tip.textContent = '生成后可以保存成图片，直接发出去。';
   try {
     const d = await jpost('/api/sharecard', { user_id: uid });
-    if (!d.ok) { stage.innerHTML = '<p style="padding:36px 0;color:#c9542f;font-size:13px">' + (d.error || '生成失败') + '</p>'; return; }
+    if (!d.ok) { stage.innerHTML = '<p style="padding:40px 0;text-align:center;color:#c9542f;font-size:14px;font-weight:600">' + (d.error || '生成失败') + '</p>'; return; }
     cardData = d;
     stage.innerHTML = buildCardSVG(d);
-    tip.textContent = '手机上如果点按钮没反应，长按下面的图保存即可。';
-    showSavableImage(2);        // 提前把图备好，手机上直接长按就存
+    tip.textContent = '手机上点「保存」会打开系统分享面板，选「存储图像」即可。';
   } catch (e) {
-    stage.innerHTML = '<p style="padding:36px 0;color:#c9542f;font-size:13px">网络出了点问题，再试一次</p>';
+    stage.innerHTML = '<p style="padding:40px 0;text-align:center;color:#c9542f;font-size:14px;font-weight:600">网络出了点问题，再试一次</p>';
   }
 }
 
@@ -1903,29 +1902,32 @@ function renderCardCanvas(scale) {
  *  所以这里同时把图挂到页面上让用户长按保存 —— 那条路在手机上一定可用。 */
 async function dlCard(scale) {
   const tip = $('card-tip');
+  tip.textContent = "正在生成图片…";
   try {
     const c = await renderCardCanvas(scale);
-    const blob = await new Promise(r => c.toBlob(r, "image/png"));   // toBlob 比 dataURL 兼容好
+    const blob = await new Promise(r => c.toBlob(r, "image/png"));
+    const fname = "知乎人格-" + (cardData && cardData.name ? cardData.name : "我") + ".png";
+    // 手机（iOS/Android）优先走系统分享面板 —— 选「存储图像」就能存相册，
+    // 这条路比 a.download 可靠得多（iOS Safari 对 a.download 支持很差）。
+    if (navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: "image/png" })] })) {
+      try {
+        await navigator.share({ files: [new File([blob], fname, { type: "image/png" })], title: "我的知乎人格分享卡" });
+        tip.textContent = "✓ 已打开分享面板（选「存储图像」保存）";
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") { tip.textContent = "已取消"; return; }
+        // 分享失败 → 回退到下载
+      }
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.download = "知乎人格-" + (cardData && cardData.name ? cardData.name : "我") + ".png";
-    a.href = url;
+    a.download = fname; a.href = url;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
     tip.textContent = "✓ 已保存（" + c.width + "×" + c.height + "）";
   } catch (e) {
-    tip.textContent = "直接下载没成功 —— 往下看，长按那张图保存即可";
+    tip.textContent = "保存没成功，再试一次";
   }
-  showSavableImage(scale);      // 无论下载成不成功，都给一条手机上走得通的路
-}
-
-/** 在弹窗下方挂一张图（手机上长按即可存相册） */
-async function showSavableImage(scale) {
-  try {
-    const c = await renderCardCanvas(scale || 2);
-    $('card-img').src = c.toDataURL("image/png");
-    $('card-savable').style.display = 'block';
-  } catch (e) {}
 }
 
 async function startDuel() {

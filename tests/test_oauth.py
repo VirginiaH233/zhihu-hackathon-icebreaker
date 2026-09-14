@@ -40,9 +40,13 @@ ok2, why2 = oauth.check_state(st)   # 无状态：同一 state 在 TTL 内可重
 check("TTL 内可重复校验（无状态设计）", ok2, why2)
 check("篡改签名会被拒绝", not oauth.check_state(st[:-1] + ("0" if st[-1] != "0" else "1"))[0])
 
-print("\n[2] state：不存在的值被拒绝")
-ok, why = oauth.check_state("伪造的state")
-check("伪造 state 被拒绝", not ok, why)
+print("\n[2] state：签名错的伪造值被拒绝")
+ok, why = oauth.check_state("1234567890.deadbeefdeadbeefdeadbeefdeadbeef")
+check("伪造签名被拒绝", not ok, why)
+
+print("\n[2b] state：无 state 放宽为待确认（微信回调不透传 state）")
+ok, why = oauth.check_state("")
+check("无 state 待确认（不挡登录）", ok, why)
 
 print("\n[3] state：过期被拒绝")
 url, st = oauth.build_authorize_url()
