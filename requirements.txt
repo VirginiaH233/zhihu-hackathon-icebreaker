@@ -2,3 +2,6 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.0.0
+# 分享卡二维码（make_qr_datauri 用）：qrcode 生成码，pillow 是它画图（PIL）的依赖
+qrcode>=7.4
+pillow>=10.0
