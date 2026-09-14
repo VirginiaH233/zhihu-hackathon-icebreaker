@@ -1133,20 +1133,28 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
 
     <div style="height:1px; background:var(--line-soft); margin:24px 0"></div>
 
-    <span class="step warm">现在，轮到你了</span>
+    <!-- 主动作：让 TA 的分身先跟你聊。
+         ⚠️ 这个按钮原来被放在「有你的分身才显示」的区块里，于是**没建分身就走不到聊天**——
+         可「真人 × TA 的分身」这条路**只需要 TA 的档案**，你自己的分身只是后面 A2A 彩蛋才要。
+         所以提到这里，永远可点。 -->
+    <div class="row" style="margin-top:2px">
+      <button id="btn-duel" onclick="startTalk()" style="flex:1">让 TA 的分身先跟你聊</button>
+    </div>
 
-    <!-- ① 还没有分身：只说一条路（授权生成）—— 没有跳过这条路了，先有「你」才能开始 -->
+    <span class="step warm">想要你自己的分身？</span>
+
+    <!-- ① 还没有分身（可选，不阻断）：想玩 A2A / 想要自己的档案时再建 -->
     <div id="me-need" class="needcard" style="display:none">
       <div class="need-h">
         <span class="need-ico">👤</span>
-        <span>还没有你的分身</span>
+        <span>还没有你的分身（可选）</span>
       </div>
       <div class="need-b">
-        要让两个分身聊起来，得先有「你」。<br>
-        你的分身来自<b>你自己在知乎写过的内容</b>——所以得先让知乎账号登录并授权。
+        上面那条路不用建分身也能走完。建了它，你能多玩一件事：<b>让两个分身自己聊一场</b>。<br>
+        你的分身来自<b>你自己在知乎写过的内容</b>——所以要知乎账号授权。
         我们<b>只读公开创作</b>，不碰私信、关注列表或任何非公开数据。
       </div>
-      <button class="accent wide" id="btn-build-inline" onclick="buildMeInline()">用知乎账号登录并生成</button>
+      <button class="accent wide" id="btn-build-inline" onclick="buildMeInline()">用知乎账号生成我的分身</button>
     </div>
 
     <!-- ①.5 正在生成：登录后自动进入，占住那 10 秒别让它空着 -->
@@ -1169,7 +1177,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
         <textarea id="intro" placeholder="你是谁 / 最近在想什么 / 想认识怎样的人"></textarea>
       </div>
       <div class="row" style="margin-top:4px">
-        <button id="btn-duel" onclick="startDuel()" style="flex:1">让两个分身见一面</button>
+        <button id="btn-a2a" onclick="startDuel()" style="flex:1">让两个分身自己聊一场</button>
         <button id="btn-edit" class="ghost" onclick="openDrawer()">查看我的分身</button>
       </div>
     </div>
@@ -1557,7 +1565,9 @@ function applyTaMode() {
 function refreshNextBtn() {
   const b = $('btn-duel');
   if (!b) return;
-  if (taMode === 'profile' || (ME && ME.mode === 'profile')) {
+  // ⚠️ 注意 ME 的条件：匹配卡要**两边的关注地图**（所以需要你的档案）。
+  // 你还没建分身时不能走匹配卡 —— 那就直接去聊（聊天只需要 TA 的档案）。
+  if (ME && (taMode === 'profile' || ME.mode === 'profile')) {
     b.textContent = '生成兴趣匹配卡';
     b.onclick = makeMatch;
   } else {
@@ -1924,7 +1934,8 @@ async function startDuel() {
   myName = myNameFromZhihu();
   introText = intro;
 
-  $('btn-duel').disabled = true;
+  const a2a = $('btn-a2a');
+  if (a2a) a2a.disabled = true;
   $('stage-duel').classList.remove('hidden');
   $('duel-log').innerHTML = '';
   $('duel-actions').style.display = 'none';
@@ -1983,8 +1994,8 @@ async function startDuel() {
     if (thinking) thinking.remove();
     addMsg('sys', '（出错：' + e.message + '）');
   } finally {
-    $('btn-duel').disabled = false;
-
+    const a2a = $('btn-a2a');
+    if (a2a) a2a.disabled = false;
   }
 }
 
