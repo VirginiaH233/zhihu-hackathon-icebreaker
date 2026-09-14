@@ -752,20 +752,36 @@ def api_stats():
 
     # 漏斗：从事件流算 —— 访问 → 搜人 → 读 TA → 建分身 → 拿评论
     # 漏斗：copy_comment 放在 comment 之后 —— 「生成」到「真的复制走」是最后也最关键的落差
-    funnel = {"visit": 0, "search": 0, "soul": 0, "me": 0,
-              "comment": 0, "copy_comment": 0, "sharecard": 0}
+    # 两种口径各留一份，因为它们的用途不同、差值本身就是信息：
+    #   funnel    = 独立人数（同一 uid 只算一次）→ 看转化率必须用它
+    #   funnel_pv = 次数（含无 uid 的历史事件）  → 看使用强度，也用来对照
+    # 为什么必须分开：漏斗的语义是「一批人走到哪一步剩多少」，用次数算会被
+    # 同一个人的重复操作灌水（刷新一次页面就多一个「访问」），转化率会失真。
+    # 差值也有含义：人数远小于次数 = 少数人在反复用；两者接近 = 每人只走一遍。
+    # 注：无 uid 的事件（早期埋点 / 开发自测）只进 funnel_pv，不污染人数口径。
+    STEPS = ("visit", "search", "soul", "me", "comment", "copy_comment", "sharecard")
+    funnel = {k: 0 for k in STEPS}          # 独立人数
+    funnel_pv = {k: 0 for k in STEPS}       # 次数
+    _seen = {k: set() for k in STEPS}
     failed: dict = {}     # 搜不到的词 -> 次数（最值钱的信号）
     errors: list = []     # 线上未捕获异常
+    since = ""            # 统计起点（最早的事件文件日期）—— 漏斗是累计值，必须说明从哪天算起
     try:
         for f in sorted(EVENTS_DIR.glob("*.jsonl")):
+            if not since:
+                since = f.stem
             for line in f.read_text(encoding="utf-8").splitlines():
                 try:
                     e = json.loads(line)
                 except Exception:
                     continue
                 k = e.get("kind")
-                if k in funnel:
-                    funnel[k] += 1
+                if k in funnel_pv:
+                    funnel_pv[k] += 1
+                    uid = (e.get("uid") or "").strip()
+                    if uid and uid not in _seen[k]:
+                        _seen[k].add(uid)
+                        funnel[k] += 1
                 if k == "error":
                     errors.append(e)
                 if k == "search" and not e.get("n"):
@@ -786,10 +802,12 @@ def api_stats():
         # 北极星（由产品负责人拍板）：用户「复制走」的评论数 —— 它才是「打算真的发出去」
         "north_star": {
             "metric": "copy_comment",
-            "value": funnel.get("copy_comment", 0),
+            "value": funnel_pv.get("copy_comment", 0),   # 北极星是「评论数」→ 次数口径
             "why": "生成只说明读了，复制才说明要用 —— 产品承诺是「帮你开口」，所以成功定义在复制",
         },
-        "funnel": funnel,                    # 漏斗各步绝对量（看流失在哪一步）
+        "funnel": funnel,                    # 漏斗各步「独立人数」（看流失在哪一步）
+        "funnel_pv": funnel_pv,              # 漏斗各步「次数」（看使用强度）
+        "funnel_since": since,               # 统计起点日期（漏斗是累计值，必须标注）
         "failed_searches": sorted(failed.items(), key=lambda x: -x[1])[:10],  # 搜不到的人
         "recent_errors": errors[-10:],       # 最近的线上报错（含路径和异常类型）
     }
@@ -909,6 +927,7 @@ class IceReq(BaseModel):
     session_id: str
     intro: str
     dialogue: list
+    user_id: str = ""                # 埋点归属：破冰卡是流程最后一步，最值钱，必须能算到人
 
 
 def sse(obj: dict) -> str:
@@ -1062,7 +1081,7 @@ def api_comment(req: CommentReq):
             "summary": (doc.get("summary") or "")[:160],
         })
 
-    _event("comment", name=ta.name, n=len(comments))
+    _event("comment", uid=(req.user_id or "")[:24], name=ta.name, n=len(comments))
     return {"ok": True, "ta_name": ta.name,
             "comments": comments,
             "parse_failed": not comments,
@@ -1142,7 +1161,7 @@ def api_sharecard(req: ShareReq):
 
     # 二维码指向产品首页（带 from=card，将来能看有多少人是扫码来的）
     qr = make_qr_datauri(SITE_URL + "/?from=card")
-    _event("sharecard")
+    _event("sharecard", uid=(req.user_id or "")[:24])
     return {"ok": True, "name": name,
             "quote": got["quote"], "tags": got["tags"][:5],
             "axes": got["axes"][:5], "values": got["values"][:5],
@@ -1165,7 +1184,7 @@ def api_icebreak(req: IceReq):
         f"{p}\n\n【TA 的名字】{ta.name}\n\n【TA 的灵魂档案】\n{ta.persona}\n\n"
         f"【用户的自我介绍】\n{req.intro}\n\n【两个分身的对话记录】\n{convo}"
     )
-    _event("icebreak", name=ta.name)
+    _event("icebreak", uid=(req.user_id or "")[:24], name=ta.name)
     return {"ok": True, "card": card, "ta_name": ta.name}
 
 
@@ -1310,7 +1329,8 @@ def api_me_save(req: MeReq, request: Request):
 
     _save_json(path, rec)
     # 区分「首次建」和「后来改」—— 改说明用户在意自己的档案（更强的参与信号）
-    _event("me_edit" if old else "me", mode=rec.get("mode"), n=rec.get("count"))
+    _event("me_edit" if old else "me", uid=(req.user_id or "")[:24],
+           mode=rec.get("mode"), n=rec.get("count"))
     return {"ok": True, **rec}
 
 
@@ -1370,7 +1390,10 @@ def oauth_callback(authorization_code: str = "", code: str = "", state: str = ""
         profile = oauth.fetch_user(token)
     except Exception as e:
         return RedirectResponse("/?oauth=err&msg=" + urllib.parse.quote(str(e)[:120]))
-    _event("oauth_login")
+    # 登录人数是关键口径。知乎 uid 是真实身份，绝不落日志 —— 只存不可逆哈希，
+    # 唯一用途是「数出有几个独立的人登录过」。
+    _login_key = hashlib.sha256(str(profile.get("uid") or "").encode()).hexdigest()[:16]
+    _event("oauth_login", uid=_login_key)
     sid = oauth.new_session(token, expires_in, profile)
     resp = RedirectResponse("/?oauth=ok")
     resp.set_cookie(COOKIE, sid, httponly=True, samesite="lax", max_age=expires_in)

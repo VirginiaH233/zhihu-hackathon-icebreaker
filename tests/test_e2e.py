@@ -86,7 +86,8 @@ def main():
     pick = cands[0]
     print(f"\n[2] POST /api/load  ({pick['name']} / {pick['signature']})")
     d = json.loads(post("/api/load", {"name": pick["name"],
-                                      "signature": pick["signature"]}).read().decode("utf-8"))
+                                      "signature": pick["signature"],
+                                      "user_id": TEST_UID}).read().decode("utf-8"))
     assert d.get("ok"), f"load 失败: {d}"
     sid, ta_name, cnt = d["session_id"], d["name"], d["count"]
     print(f"    ✅ ok · 作者={ta_name} · 资料 {cnt} 条 · 缓存={d.get('cached')} · 耗时 {time.time()-t0:.0f}s")

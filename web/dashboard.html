@@ -32,6 +32,8 @@
   .step .num { width: 76px; flex:0 0 auto; text-align:right; font-variant-numeric: tabular-nums;
                font-size: 13.5px; color: var(--ink-soft); }
   .step .rate { width: 58px; flex:0 0 auto; text-align:right; font-size: 12px; }
+  .step .num .pv { color:#9aa3b0; font-size:11.5px; font-weight:400; }
+  .warnline { color: var(--warn); }
   .rate.hi { color: var(--good); } .rate.mid { color: var(--warn); } .rate.lo { color: var(--bad); }
 
   table { width:100%; border-collapse: collapse; font-size: 13.5px; }
@@ -90,30 +92,34 @@ function render(d) {
 
   // 漏斗
   h += `<div class="card"><h2>漏斗</h2>
-    <div class="hint">每一步多少人走到 —— 看「哪一步掉得最狠」，那里就是最该优化的一环。</div>`;
+    <div class="hint">每一步多少人走到 —— 看「哪一步掉得最狠」，那里就是最该优化的一环。
+      <br><b>口径</b>：全部按<b>独立人数</b>算（同一人只算一次）；括号里是<b>次数</b>。累计自 ${esc(d.funnel_since || '上线')} 起（不是今日值）。
+      ${((d.funnel_pv||{}).visit||0) > (f.visit||0) ? '<br><span class="warnline">⚠️ 次数多于人数：早期埋点没带用户标识，那部分事件不计入人数，所以人数偏低 —— 属正常。</span>' : ''}</div>`;
   if (!first) {
     h += `<div class="empty">还没有数据（产品刚上线 / 还没有人访问）</div>`;
   } else {
     FUNNEL_STEPS.forEach(([k, label], i) => {
       const v = f[k] || 0;
       const w = first ? Math.max(1, Math.round(v / first * 100)) : 0;
+      const pv = (d.funnel_pv || {})[k] || 0;
       const prev = i === 0 ? null : (f[FUNNEL_STEPS[i-1][0]] || 0);
       const pct = prev ? Math.round(v / prev * 100) : null;
       const rc = pct === null ? '' : rateClass(pct);
       h += `<div class="step">
         <div class="label">${label}</div>
         <div class="barwrap"><div class="bar" style="width:${w}%"></div></div>
-        <div class="num">${v}</div>
+        <div class="num">${v}${pv > v ? ` <span class="pv">(${pv})</span>` : ''}</div>
         <div class="rate ${rc}">${pct === null ? '' : pct + '%'}</div>
       </div>`;
     });
-    h += `<div class="hint" style="margin-top:12px">最右列 = 相对上一步的转化率。60% 以上绿、30–60% 黄、30% 以下红。</div>`;
+    h += `<div class="hint" style="margin-top:12px">最右列 = 相对上一步的转化率（<b>按人数算</b>）。60% 以上绿、30–60% 黄、30% 以下红。</div>`;
   }
   h += `</div>`;
 
   // 存量
   h += `<div class="card"><h2>存量</h2>
-    <div class="hint">已经沉淀下来的资产 —— 答主档案是全站复用的公共资产（同一个答主只建一次）。</div>
+    <div class="hint">已经沉淀下来的资产 —— 答主档案是全站复用的公共资产（同一个答主只建一次）。
+      <br><b>口径</b>：这里按<b>档案文件数</b>算，漏斗里「建自己分身」按<b>事件</b>算 —— 两者口径与时间范围不同，数字对不上属正常。</div>
     <div class="grid">
       <div class="kpi"><div class="v">${d.users ?? 0}</div><div class="k">生成过分身的人数</div></div>
       <div class="kpi"><div class="v">${d.souls ?? 0}</div><div class="k">读过的答主数</div></div>

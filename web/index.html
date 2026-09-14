@@ -2450,7 +2450,7 @@ async function makeCard() {
   $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const busy = showBusy('ice-card', 'card', '正在写这张卡');
   try {
-    const d = await jpost('/api/icebreak', { session_id: sid, intro: introText, dialogue });
+    const d = await jpost('/api/icebreak', { session_id: sid, user_id: uid, intro: introText, dialogue });
     busy.stop();
     if (!d.ok) { toast(d.error); $('ice-card').innerHTML = '<div class="hint">没写出来：' + esc(d.error || '再试一次') + '</div>'; return; }
     renderIce(d.card, d.ta_name || taName);
