@@ -975,9 +975,16 @@ def api_sharecard(req: ShareReq):
         return {"ok": False, "error": "还没有你的档案 —— 先生成一次你的分身"}
 
     name = (rec.get("name") or "我").strip() or "我"
-    p = (ROOT / "prompts" / "6-分享卡.md").read_text(encoding="utf-8")
-    p = p.split("---", 2)[2].strip() if p.startswith("---") else p
-    raw = cli_answer(f"{p}\n\n【TA 的名字】{name}\n\n【TA 的档案】\n{persona}")
+    try:
+        p = (ROOT / "prompts" / "6-分享卡.md").read_text(encoding="utf-8")
+        p = p.split("---", 2)[2].strip() if p.startswith("---") else p
+        raw = cli_answer(f"{p}\n\n【TA 的名字】{name}\n\n【TA 的档案】\n{persona}")
+    except Exception as e:
+        # 别让异常漏成 500（前端只能看到「网络出了点问题」）—— 把原因说清楚
+        _ZHIHU_ERR["sharecard"] = f"{type(e).__name__}: {e}"[:200]
+        return {"ok": False, "error": (
+            f"卡片生成没成功（{type(e).__name__}）。等几秒再点一次试试；"
+            f"如果一直这样，多半是模型调用被限流了。"), "debug": dict(_ZHIHU_ERR)}
     got = _parse_sharecard(raw)
 
     # 解析救不回来时，用档案兜底（至少给一张卡，不把用户卡死）
