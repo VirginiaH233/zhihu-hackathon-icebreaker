@@ -1,7 +1,10 @@
 """OAuth 逻辑单测（不依赖真实凭证，Mock 掉网络）
 
 重点验证文档里最容易踩的安全点：
-  1. state 不可预测、不可重复使用、会过期
+  1. state 不可伪造、会过期（2026-09-14 起改为**无状态签名**：
+     不再依赖服务端存储，所以同一 state 在 TTL 内可重复校验 —— 防 CSRF 靠签名 + 时效，
+     不靠「消费一次」。这条改动的起因是「手机上登录失败」：
+     进程重启/多副本会让内存里的 state 丢失。）
   2. 回调参数兼容 authorization_code / code
   3. token 响应里 code:20000 是成功（不能当失败）
 """
@@ -26,15 +29,16 @@ print("=" * 70)
 print("OAuth 逻辑单测（Mock）")
 print("=" * 70)
 
-print("\n[1] state：生成 → 校验通过 → 不可重复使用")
+print("\n[1] state：生成 → 校验通过（无状态签名，TTL 内可重复）")
 url, st = oauth.build_authorize_url()
 check("state 长度足够（≥20）", len(st) >= 20, len(st))
 check("授权 URL 含 response_type=code", "response_type=code" in url)
 check("授权 URL 含 state", f"state={st}" in url)
 ok, why = oauth.check_state(st)
 check("首次校验通过", ok, why)
-ok2, why2 = oauth.check_state(st)
-check("重复使用被拒绝", not ok2, why2)
+ok2, why2 = oauth.check_state(st)   # 无状态：同一 state 在 TTL 内可重复校验
+check("TTL 内可重复校验（无状态设计）", ok2, why2)
+check("篡改签名会被拒绝", not oauth.check_state(st[:-1] + ("0" if st[-1] != "0" else "1"))[0])
 
 print("\n[2] state：不存在的值被拒绝")
 ok, why = oauth.check_state("伪造的state")
@@ -42,7 +46,8 @@ check("伪造 state 被拒绝", not ok, why)
 
 print("\n[3] state：过期被拒绝")
 url, st = oauth.build_authorize_url()
-oauth.STATES[st] = time.time() - (oauth.STATE_TTL + 10)
+old_ts = int(time.time()) - (oauth.STATE_TTL + 10)
+st = f"{old_ts}.{oauth._sign_state(old_ts)}"      # 造一个签名正确但已过期的 state
 ok, why = oauth.check_state(st)
 check("过期 state 被拒绝", not ok, why)
 

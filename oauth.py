@@ -82,14 +82,32 @@ def is_configured() -> bool:
 
 
 # ---- 会话：demo 用进程内 Map；多实例部署需换共享存储 ----
-STATES: dict = {}      # state -> created_at
+# ⚠️ state 以前存在进程内存字典里（STATES = {}）—— 这在云端是**结构性问题**：
+# ① 每次部署 Railway 会重启进程，重启后 state 全丢；
+# ② 滚动部署时新旧实例并存，state 生成在 A、回调打到 B → 校验必失败；
+# ③ 免费层空闲休眠同理。
+# 而用户在手机上从「点登录」到「知乎授权完跳回来」要花几十秒，撞上的概率不低。
+# 结果就是「手机上登录失败」—— 且错误提示只会说「state 缺失或已使用」，查不出真因。
+# 改成**无状态签名**：state = "{时间戳}.{HMAC}", 校验只验签名 + 时效，不依赖任何服务端存储。
+_STATE_SECRET = ""     # 首次用到时从 APP_KEY 派生
+
+def _state_secret() -> str:
+    global _STATE_SECRET
+    if not _STATE_SECRET:
+        import hashlib as _h
+        _STATE_SECRET = _h.sha256(("state|" + (APP_KEY or APP_ID or "fallback")).encode()).hexdigest()
+    return _STATE_SECRET
+
+def _sign_state(ts: int) -> str:
+    import hmac as _m, hashlib as _h
+    return _m.new(_state_secret().encode(), str(ts).encode(), _h.sha256).hexdigest()[:32]
 SESSIONS: dict = {}    # session_id -> {access_token, expires_at, profile}
 
 
 def build_authorize_url() -> tuple:
     """生成授权 URL + state（state 存服务端，短时效）"""
-    state = secrets.token_urlsafe(24)
-    STATES[state] = time.time()
+    ts = int(time.time())
+    state = f"{ts}.{_sign_state(ts)}"      # 无状态：回调时不依赖服务端还记得它
     q = urllib.parse.urlencode({
         "redirect_uri": REDIRECT_URI,
         "app_id": APP_ID,
@@ -100,12 +118,20 @@ def build_authorize_url() -> tuple:
 
 
 def check_state(state: str) -> tuple:
-    """校验并原子消费 state。返回 (ok, reason)"""
-    ts = STATES.pop(state, None)
-    if ts is None:
-        return False, "state 缺失或已使用"
-    if time.time() - ts > STATE_TTL:
-        return False, "state 已过期"
+    """校验 state（无状态：验签名 + 时效）。返回 (ok, reason)"""
+    import hmac as _m
+    if not state or "." not in state:
+        return False, "没带 state（可能是从知乎 App 内打开的，换浏览器再试）"
+    ts_s, _, sig = state.partition(".")
+    try:
+        ts = int(ts_s)
+    except ValueError:
+        return False, "state 格式不对"
+    if not _m.compare_digest(_sign_state(ts), sig):
+        return False, "state 校验失败（换浏览器再试一次）"
+    age = time.time() - ts
+    if age > STATE_TTL:
+        return False, f"state 已过期（在授权页停留了 {int(age/60)} 分钟，回来重试一次即可）"
     return True, ""
 
 
