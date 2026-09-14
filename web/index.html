@@ -752,6 +752,20 @@ button.share { background: linear-gradient(135deg, #ff8a63, #ff7a59); border-col
    登录门（v6 · 破晓版）：夜→破晓，翻牌可逆，浮动登录按钮
    场景与动效全部作用域限定在 #gate 内，不碰产品其他部分
    ============================================================ */
+/* 启动遮罩 */
+#boot {
+  position: fixed; inset: 0; z-index: 99;
+  background: linear-gradient(180deg, #233A56 0%, #3A5878 46%, #6E8FAC 100%);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .32s ease;
+}
+#boot.gone { opacity: 0; pointer-events: none; }
+#boot .boot-in { text-align: center; color: #fff; }
+#boot .boot-name { font-size: 22px; font-weight: 800; letter-spacing: .04em;
+  font-family: var(--serif, "FangSong","仿宋",serif); }
+#boot .boot-name em { font-style: normal; color: #F2B134; }
+#boot .boot-tip { margin-top: 10px; font-size: 12.5px; color: rgba(255,255,255,.62); letter-spacing: .1em; }
+
 #gate {
   position: fixed; inset: 0; z-index: 60; overflow-y: auto;
   --serif: "FangSong","仿宋","STFangsong","Songti SC","SimSun",serif;
@@ -963,6 +977,14 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
 <body>
 
 <!-- ========== 登录门（v6：破晓版，未登录只能看到这一屏）========== -->
+<!-- 启动遮罩：登录状态判断完之前什么都不显示（首屏干净，没有「主页→登录页」的闪烁） -->
+<div id="boot">
+  <div class="boot-in">
+    <div class="boot-name">社恐<em>破冰船</em></div>
+    <div class="boot-tip">正在准备…</div>
+  </div>
+</div>
+
 <div id="gate">
   <div class="g-scene" id="gate-scene">
     <div class="g-bgfill"></div>
@@ -1020,16 +1042,9 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
 </div>
 
 <div class="wrap" id="app" style="display:none">
-<script>
-/* 上次已登录过 → 先按「已登录」显示，避免回访用户看到登录门闪一下。
-   真状态由 checkOauth() 校正：没登录会被打回登录门。 */
-try {
-  if (localStorage.getItem('gate_hint') === '1') {
-    document.getElementById('gate').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-  }
-} catch (e) {}
-</script>
+<!-- 这里原来有一段「上次登录过就先乐观显示产品」的脚本，用来避免回访用户看到登录门闪一下。
+     但它带来的问题更糟：**服务端 session 会因容器重启/休眠而失效**，于是用户会看到
+     「先闪出主页 → 再被打回登录页」。改成下面的启动遮罩：判断完再决定显示哪个，两个方向都不闪。 -->
 
 
   <!-- ========== 顶栏 ========== -->
@@ -3034,7 +3049,11 @@ async function checkOauth() {
   const _devLocal = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
   if (_devLocal) { gateShow(false); }
   try {
-    const d = await (await fetch('/api/oauth/status')).json();
+    // 两个请求**并行**（原来串行，启动遮罩会多等一个来回）
+    const [d, me] = await Promise.all([
+      fetch('/api/oauth/status').then(r => r.json()),
+      fetch('/api/oauth/me').then(r => r.json()).catch(() => ({ ok: false, logged_in: false }))
+    ]);
     if (!d.configured) {
       $('o-title').textContent = '暂未开放';
       $('o-out').style.display = 'none';
@@ -3044,12 +3063,10 @@ async function checkOauth() {
       $('gate-btn').disabled = true;
       return;
     }
-    const me = await (await fetch('/api/oauth/me')).json();
     ZHIHU = me;
     renderTop();
     if (me.logged_in) {
       gateShow(false);          // 已登录 → 直接进产品
-      try { localStorage.setItem('gate_hint', '1'); } catch (e) {}
       $('o-title').textContent = '已登录：' + (me.profile.fullname || '');
       $('o-desc').textContent = '你的分身会优先来自你自己的知乎创作';
       $('o-btn').style.display = 'none';
@@ -3068,11 +3085,15 @@ async function checkOauth() {
       // 登录前置（用户确认保持）：注册/登录数影响评审评分，而且这是通行做法 ——
       // 登录门自己承担「勾人」职责（翻牌三张 + 一句钩子），不是干巴巴的墙。
       if (!_devLocal) gateShow(true);   // 未登录 → 只给登录门（本地开发豁免）
-      try { localStorage.removeItem('gate_hint'); } catch (e) {}
       $('o-btn').style.display = 'inline-block';
       $('o-out').style.display = 'none';
     }
-  } catch (e) {}
+  } catch (e) {
+  } finally {
+    // 无论判断成功还是出错，都要收掉启动遮罩 —— 否则页面会永远停在「正在准备…」
+    const b = document.getElementById('boot');
+    if (b) { b.classList.add('gone'); setTimeout(() => b.remove(), 340); }
+  }
 }
 /* ============================================================
    登录门（v5 · 登录前置）
