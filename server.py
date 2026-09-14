@@ -772,6 +772,12 @@ def api_stats():
         "talked_users": talked_users,        # 真的聊过的人
         "with_comment": with_comment,        # 聊完还拿了评论的人
         "hot": sorted(hot.items(), key=lambda x: -x[1])[:12],   # 热门答主
+        # 北极星（由产品负责人拍板）：用户「复制走」的评论数 —— 它才是「打算真的发出去」
+        "north_star": {
+            "metric": "copy_comment",
+            "value": funnel.get("copy_comment", 0),
+            "why": "生成只说明读了，复制才说明要用 —— 产品承诺是「帮你开口」，所以成功定义在复制",
+        },
         "funnel": funnel,                    # 漏斗各步绝对量（看流失在哪一步）
         "failed_searches": sorted(failed.items(), key=lambda x: -x[1])[:10],  # 搜不到的人
         "recent_errors": errors[-10:],       # 最近的线上报错（含路径和异常类型）
