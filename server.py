@@ -141,7 +141,9 @@ BODY_LIMIT = 1200
 
 # 取料方式一改就 +1：缓存里记了这个版本号，旧档案会被判为过期、自动重建。
 # （不升版本号的话，改了取料也读不到效果 —— 旧的档案还在缓存里）
-MATERIAL_VERSION = 5
+# v6（2026-09-14）：补「想法」的阈值从 <3 提到 <8 —— 取料结果变了，旧缓存（可能只
+#                   抓到三五条）必须重建，否则修了也白修。
+MATERIAL_VERSION = 6
 
 
 def _search_items(query: str, count: int = 10, retries: int = 2) -> list:
@@ -290,7 +292,12 @@ def take_by_signature(name: str, signature: str) -> list:
     # 内容搜索只收录「有排名的」内容 —— 显示名是英文/拼音的作者（如 wenbo）
     # 基本搜不到自己写的回答，「文博」还会被匹配成一堆同音的无关账号。
     # 「想法」免鉴权可读，是唯一能拿到 TA 原话的兜底，所以素材薄时补进来。
-    if len(lib) < 3:
+    #
+    # 阈值原来是 3 —— 太低：搜索只命中三五条时正好停手，而那正是最需要补料的答主。
+    # 实测线上抓 chenqin 只拿到 3 条（1 回答 + 2 文章）就不补了，而 TA 的公开内容
+    # 绝大多数是「想法」→ 档案里没有一条 TA 的原话，分身的味道就没了。
+    # 提到 8：素材不够丰富的都补一轮想法（想法是免鉴权接口，代价只是一次网络请求）。
+    if len(lib) < 8:
         have = {x["summary"][:60] for x in lib}
         for x in fetch_pins(signature):
             key = x["summary"][:60]
