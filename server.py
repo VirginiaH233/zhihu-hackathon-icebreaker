@@ -331,12 +331,73 @@ def take_by_signature(name: str, signature: str) -> list:
     return lib
 
 
+# 模型偶尔不干活，直接回一句自我介绍（实测：梁边妖那次返回「我是知乎直答…」，
+# 结果被当成档案存了下来、还盖住了旧的好档案）。这类输出必须拦在存盘之前。
+_BAD_PERSONA_MARKERS = (
+    "知乎直答", "AI搜索产品", "AI 搜索产品", "我是知乎开发的",
+    "我是一个人工智能", "我是一个 AI", "作为AI", "作为 AI",
+)
+
+
+def looks_broken(persona: str) -> bool:
+    """档案体检：太短、或者像自我介绍，就算不合格。
+
+    ⚠️ 别加「必须有小节标题」这类骨架判据 —— 「关注画像」（1b，素材薄时的降级产物）
+    本来就没有 `#`（实测「路过的鞋」那份是「**一句话**：素材太少…」），会被误杀。
+    只抓两种确定的坏：长度不对、内容是自我介绍。
+    """
+    t = (persona or "").strip()
+    if len(t) < 120:
+        return True
+    return any(m in t for m in _BAD_PERSONA_MARKERS)
+
+
+def forge_with_check(fn, name: str) -> str:
+    """生成档案并体检；不合格就重试。三次都不行返回空串（上层降级），
+    绝不把垃圾当档案存下来 —— 存下来比失败更糟，用户会以为产品坏了。
+
+    ⚠️ 两种坏要分开对待：
+    - 「我是知乎直答」这类自我介绍 = 素材内容触发的**确定性**安全兜底，重试无效，
+      直接放弃（别白花额度）；
+    - 太短 = 可能偶发，才值得重试。
+    """
+    for i in range(3):
+        out = fn()
+        if not looks_broken(out):
+            return out
+        if any(m in (out or "") for m in _BAD_PERSONA_MARKERS):
+            return ""     # 确定性兜底，重试没用
+        print(f"[warn] {name} 档案输出异常（第 {i+1} 次）：{(out or '')[:60]!r}", flush=True)
+    return ""
+
+
 def forge_soul(name: str, library: list) -> str:
     """生成灵魂档案：用 prompts/1-灵魂档案.md 生成 TA 的人格档案。"""
     p = (ROOT / "prompts" / "1-灵魂档案.md").read_text(encoding="utf-8")
     p = p.split("---", 2)[2].strip() if p.startswith("---") else p
     material = "\n".join(f"- {x['title']}（{x['summary']}）" for x in library)
     return cli_answer(f"{p}\n\n【答主的公开内容】{name}：\n{material}")
+
+
+def forge_soul_chunked(name: str, library: list, chunk_size: int = 3) -> str:
+    """整批生成翻车时的自救：分块找出触发直答安全兜底的「毒素材」，用健康子集重生成。
+
+    实测（梁边妖 20 条）：单放某些内容（性别自嘲 / 具体人物恩怨 / 涉政）会让直答
+    **确定性地**返回「我是知乎直答」的自我介绍，且重试无效（内容没变）。只能剔除。
+    分块时每块只调 1 次（不重试，省额度），翻车的整块丢弃；健康子集 ≥3 条再整批生成。
+    """
+    healthy: list = []
+    for i in range(0, len(library), chunk_size):
+        chunk = library[i:i + chunk_size]
+        out = forge_soul(name, chunk)
+        if not looks_broken(out):
+            healthy.extend(chunk)
+        else:
+            titles = "、".join((x.get("title") or "")[:14] for x in chunk)
+            print(f"[warn] 剔除翻车素材块（第 {i}-{i + len(chunk) - 1} 条）：{titles}", flush=True)
+    if len(healthy) < 3:
+        return ""
+    return forge_with_check(lambda: forge_soul(name, healthy), name)
 
 
 # 素材薄到这个程度就画不出「人格」了 —— 改画「关注画像」（prompts/1b-关注画像.md），
@@ -452,6 +513,10 @@ def api_load(req: LoadReq):
     # 取料方式升级过 → 旧档案的素材是残缺的，判为过期重建（靠 material_version 识别）
     if cached and cached.get("material_version") != MATERIAL_VERSION:
         cached = None
+    # 档案本身坏了（模型偶发跑偏）→ 同样判为过期，重新生成
+    if cached and looks_broken(cached.get("persona")):
+        print(f"[warn] 缓存里的档案不合格，重建：{key}", flush=True)
+        cached = None
     from_cache = bool(cached)
     if cached:
         author, library, persona = cached["name"], cached["library"], cached["persona"]
@@ -489,9 +554,23 @@ def api_load(req: LoadReq):
             _fav = fetch_favlist_titles(signature)
             _extra = (f"【TA 的公开收藏夹名字（只看得到名字，看不到内容）】\n{_fav}"
                       if _fav else "")
-            persona = forge_profile(author, library, _extra)
+            persona = forge_with_check(lambda: forge_profile(author, library, _extra), author)
         else:
-            persona = forge_soul(author, library)
+            # 三层兜底：整批 → 分块剔毒素材 → 退关注画像（更简单，更少触发安全兜底）
+            persona = forge_with_check(lambda: forge_soul(author, library), author)
+            if not persona:
+                persona = forge_soul_chunked(author, library)
+            if not persona:
+                _fav = fetch_favlist_titles(signature)
+                _extra = (f"【TA 的公开收藏夹名字（只看得到名字，看不到内容）】\n{_fav}"
+                          if _fav else "")
+                persona = forge_with_check(lambda: forge_profile(author, library, _extra), author)
+                if persona:
+                    mode = "profile"   # 降级了，下游改走匹配卡（不做分身对谈）
+        if not persona:
+            return {"ok": False, "error": (
+                f"这次没整理出「{author}」的档案（生成时出了点岔子）。再点一次通常就好了。"),
+                "debug": dict(_ZHIHU_ERR)}
         cached = {"name": author, "library": library, "persona": persona, "mode": mode,
                   "material_version": MATERIAL_VERSION,
                   "cached_at": int(time.time())}
