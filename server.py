@@ -25,7 +25,7 @@ import urllib.request
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
 
 import oauth
@@ -55,6 +55,20 @@ def _find_cli() -> str:
 CLI = _find_cli()
 
 app = FastAPI(title="社恐破冰船")
+
+
+@app.exception_handler(Exception)
+async def _on_unhandled(request: Request, exc: Exception):
+    """未捕获异常 → 记进事件流，再返回结构化错误。
+
+    以前线上 500 只躺在 Railway 日志里，外部完全看不到，排查全靠猜（分享卡那次）。
+    记进事件流后，/api/stats 的 recent_errors 就能直接看到最近出了什么错。
+    """
+    _event("error", path=str(request.url.path), err=f"{type(exc).__name__}: {exc}"[:200])
+    return JSONResponse(status_code=500,
+                        content={"ok": False, "error": "服务器出了点问题，再试一次"})
+
+
 SESSIONS: dict[str, SoulAgent] = {}      # session_id -> Agent
 SOUL_CACHE: dict[str, dict] = {}         # 昵称 -> {persona, library, name}（省额度：同名不重建）
 
@@ -65,6 +79,7 @@ DATA = ROOT / "data"
 USERS_DIR = DATA / "users"     # 你的分身（持久，可编辑）
 SOULS_DIR = DATA / "souls"     # TA 的灵魂档案（缓存，可复用、可预热）
 HISTORY_DIR = DATA / "history" # 每个用户「聊过谁」（按 uid 归属，给个人抽屉的入口用）
+EVENTS_DIR = DATA / "events"   # 使用事件流（按天 jsonl）—— 漏斗分析用
 
 USERS_DIR.mkdir(parents=True, exist_ok=True)
 SOULS_DIR.mkdir(parents=True, exist_ok=True)
@@ -481,6 +496,7 @@ def api_candidates(req: LoadReq):
     if not req.name.strip():
         return {"ok": False, "error": "输入一个知乎昵称"}
     cands = search_candidates(req.name)
+    _event("search", q=req.name.strip(), n=len(cands))   # 搜不到的词是最值钱的信号
     if not cands:
         return {"ok": False, "error": f"没搜到「{req.name}」相关的内容，换更准确的昵称试试。"}
     return {"ok": True, "candidates": cands}
@@ -577,6 +593,7 @@ def api_load(req: LoadReq):
         SOUL_CACHE[key] = cached
         _save_json(SOULS_DIR / fname, cached)          # 落盘：重启也不丢
 
+    _event("soul", name=author, mode=mode, cached=from_cache, n=len(library))
     sid = uuid.uuid4().hex
     SESSIONS[sid] = SoulAgent(name=author, persona=persona, library=library, verbose=False)
     return {
@@ -615,6 +632,22 @@ def api_chat(req: ChatReq):
 
 
 # ==================== 我聊过谁（个人抽屉的入口）====================
+
+def _event(kind: str, **fields) -> None:
+    """记一条使用事件，append 到当天的 jsonl。埋点回答的是「多少人走到哪一步」。
+
+    ⚠️ 隐私原则：只记「发生了什么」，**不记用户说了什么、写了什么**。
+    唯一例外是**搜索词** —— 它是公开的答主名，而且「谁搜不到」对优化找人
+    路径是最关键的信息。埋点失败绝不能影响主流程，所以整个包在 try 里。
+    """
+    try:
+        EVENTS_DIR.mkdir(parents=True, exist_ok=True)
+        rec = {"ts": int(time.time()), "kind": kind, **fields}
+        with (EVENTS_DIR / f"{time.strftime('%Y-%m-%d')}.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
 
 def _record_history(uid: str, name: str, signature: str = "", topic: str = "",
                     comment: bool = False) -> None:
@@ -698,6 +731,29 @@ def api_stats():
     except Exception:
         pass
 
+    # 漏斗：从事件流算 —— 访问 → 搜人 → 读 TA → 建分身 → 拿评论
+    funnel = {"visit": 0, "search": 0, "soul": 0, "me": 0, "comment": 0, "sharecard": 0}
+    failed: dict = {}     # 搜不到的词 -> 次数（最值钱的信号）
+    errors: list = []     # 线上未捕获异常
+    try:
+        for f in sorted(EVENTS_DIR.glob("*.jsonl")):
+            for line in f.read_text(encoding="utf-8").splitlines():
+                try:
+                    e = json.loads(line)
+                except Exception:
+                    continue
+                k = e.get("kind")
+                if k in funnel:
+                    funnel[k] += 1
+                if k == "error":
+                    errors.append(e)
+                if k == "search" and not e.get("n"):
+                    q = (e.get("q") or "").strip()
+                    if q:
+                        failed[q] = failed.get(q, 0) + 1
+    except Exception:
+        pass
+
     return {
         "ok": True,
         "users": _count(USERS_DIR),          # 生成过分身的人数
@@ -706,6 +762,9 @@ def api_stats():
         "talked_users": talked_users,        # 真的聊过的人
         "with_comment": with_comment,        # 聊完还拿了评论的人
         "hot": sorted(hot.items(), key=lambda x: -x[1])[:12],   # 热门答主
+        "funnel": funnel,                    # 漏斗各步绝对量（看流失在哪一步）
+        "failed_searches": sorted(failed.items(), key=lambda x: -x[1])[:10],  # 搜不到的人
+        "recent_errors": errors[-10:],       # 最近的线上报错（含路径和异常类型）
     }
 
 
@@ -966,6 +1025,7 @@ def api_comment(req: CommentReq):
             "summary": (doc.get("summary") or "")[:160],
         })
 
+    _event("comment", name=ta.name, n=len(comments))
     return {"ok": True, "ta_name": ta.name,
             "comments": comments,
             "parse_failed": not comments,
@@ -1045,6 +1105,7 @@ def api_sharecard(req: ShareReq):
 
     # 二维码指向产品首页（带 from=card，将来能看有多少人是扫码来的）
     qr = make_qr_datauri(SITE_URL + "/?from=card")
+    _event("sharecard")
     return {"ok": True, "name": name,
             "quote": got["quote"], "tags": got["tags"][:5],
             "axes": got["axes"][:5], "values": got["values"][:5],
@@ -1209,6 +1270,7 @@ def api_me_save(req: MeReq, request: Request):
         }
 
     _save_json(path, rec)
+    _event("me", mode=rec.get("mode"), n=rec.get("count"))
     return {"ok": True, **rec}
 
 
@@ -1221,6 +1283,7 @@ COOKIE = "salt_sid"
 @app.get("/api/oauth/status")
 def api_oauth_status():
     """前端据此决定显示「用知乎登录」还是「凭证未配置」的说明。"""
+    _event("visit")          # 每次页面加载会调一次 → 当作「访问」
     return {"ok": True, "configured": oauth.is_configured()}
 
 
