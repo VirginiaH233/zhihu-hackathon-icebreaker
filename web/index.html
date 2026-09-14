@@ -1467,7 +1467,7 @@ async function searchCand() {
   // 搜人可能要换几次词（实测最慢 20 秒），所以这里必须有会动的提示
   const busyS = showBusy('cand-list', 'search', '正在找 TA');
   try {
-    const d = await jpost('/api/candidates', { name: nick });
+    const d = await jpost('/api/candidates', { name: nick, user_id: uid });
     busyS.stop();
     if (!d.ok) {
       $('cand-list').innerHTML = '<div class="err">' + esc(d.error) + '</div>';
@@ -1629,7 +1629,7 @@ async function loadByCand(name, signature) {
   // setTimeout 是异步的，回调会插到「读到 N 条」之后，DOM 顺序就乱了
   [`正在读「${name}」的公开创作…`, '正在整理 TA 的公开内容…'].forEach((t, i) => addLine(box, t, i * 620));
   try {
-    const d = await jpost('/api/load', { name, signature });
+    const d = await jpost('/api/load', { name, signature, user_id: uid });
     if (!d.ok) { showErr(d.error); return; }
     sid = d.session_id; taName = d.name; taMode = d.mode || 'soul';
     taTooThin = !!d.too_thin;
@@ -2534,6 +2534,9 @@ function copyText(txt, el = null, okMsg = '已复制 ✓', failMsg = '这句能�
       setTimeout(() => { el.textContent = old; el.classList.remove('done'); }, 1600);
     }
     toast(okMsg === '已复制 ✓' ? failMsg : okMsg);
+    // 埋点：复制 = 用户「打算真的发出去」—— 比「生成了几条」更接近产品价值
+    try { jpost('/api/event', { kind: 'copy_comment', user_id: uid,
+      name: (typeof taName !== 'undefined' && taName) ? taName : '' }); } catch (e) {}
   }).catch(() => toast('复制失败，请手动选择'));
 }
 
@@ -3078,7 +3081,7 @@ async function checkOauth() {
   try {
     // 两个请求**并行**（原来串行，启动遮罩会多等一个来回）
     const [d, me] = await Promise.all([
-      fetch('/api/oauth/status').then(r => r.json()),
+      fetch('/api/oauth/status?user_id=' + encodeURIComponent(uid)).then(r => r.json()),
       fetch('/api/oauth/me').then(r => r.json()).catch(() => ({ ok: false, logged_in: false }))
     ]);
     if (!d.configured) {

@@ -481,6 +481,7 @@ def fetch_favlist_titles(token: str) -> str:
 class LoadReq(BaseModel):
     name: str            # 作者名（用户点选确认后）
     signature: str = ""  # 作者签名（主页唯一 token，同名靠它区分）
+    user_id: str = ""    # 埋点归属（匿名 uid，只说「还是这个人」，不含任何身份信息）
 
 
 class ChatReq(BaseModel):
@@ -496,7 +497,7 @@ def api_candidates(req: LoadReq):
     if not req.name.strip():
         return {"ok": False, "error": "输入一个知乎昵称"}
     cands = search_candidates(req.name)
-    _event("search", q=req.name.strip(), n=len(cands))   # 搜不到的词是最值钱的信号
+    _event("search", uid=(req.user_id or "")[:24], q=req.name.strip(), n=len(cands))
     if not cands:
         return {"ok": False, "error": f"没搜到「{req.name}」相关的内容，换更准确的昵称试试。"}
     return {"ok": True, "candidates": cands}
@@ -593,7 +594,8 @@ def api_load(req: LoadReq):
         SOUL_CACHE[key] = cached
         _save_json(SOULS_DIR / fname, cached)          # 落盘：重启也不丢
 
-    _event("soul", name=author, mode=mode, cached=from_cache, n=len(library))
+    _event("soul", uid=(req.user_id or "")[:24], name=author, mode=mode,
+           cached=from_cache, n=len(library))
     sid = uuid.uuid4().hex
     SESSIONS[sid] = SoulAgent(name=author, persona=persona, library=library, verbose=False)
     return {
@@ -643,7 +645,13 @@ def _event(kind: str, **fields) -> None:
     try:
         EVENTS_DIR.mkdir(parents=True, exist_ok=True)
         rec = {"ts": int(time.time()), "kind": kind, **fields}
-        with (EVENTS_DIR / f"{time.strftime('%Y-%m-%d')}.jsonl").open("a", encoding="utf-8") as f:
+        # 按**业务时区**（UTC+8）分天：容器跑在 UTC，直接 strftime 会把晚上 8 点后的
+        # 事件算进「明天」，跨天漏斗就全错位了（信度问题）。
+        # ⚠️ 必须用 gmtime（按 UTC 解释时间戳），不能用 localtime ——
+        # localtime 会套上「运行环境自己的时区」：容器是 UTC 时是对的，
+        # 但本地开发机本身就是 UTC+8，会再 +8h，跨天就错位了（真踩过）。
+        day = time.strftime("%Y-%m-%d", time.gmtime(time.time() + 8 * 3600))
+        with (EVENTS_DIR / f"{day}.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     except Exception:
         pass
@@ -732,7 +740,9 @@ def api_stats():
         pass
 
     # 漏斗：从事件流算 —— 访问 → 搜人 → 读 TA → 建分身 → 拿评论
-    funnel = {"visit": 0, "search": 0, "soul": 0, "me": 0, "comment": 0, "sharecard": 0}
+    # 漏斗：copy_comment 放在 comment 之后 —— 「生成」到「真的复制走」是最后也最关键的落差
+    funnel = {"visit": 0, "search": 0, "soul": 0, "me": 0,
+              "comment": 0, "copy_comment": 0, "sharecard": 0}
     failed: dict = {}     # 搜不到的词 -> 次数（最值钱的信号）
     errors: list = []     # 线上未捕获异常
     try:
@@ -1280,10 +1290,31 @@ def api_me_save(req: MeReq, request: Request):
 COOKIE = "salt_sid"
 
 
+class EventReq(BaseModel):
+    kind: str                 # 事件名（如 copy_comment / pick）
+    user_id: str = ""
+    name: str = ""            # 相关答主（可选）
+    n: int = -1
+
+
+@app.post("/api/event")
+def api_event(req: EventReq):
+    """前端上报「后端看不到的用户动作」。
+
+    最要紧的是 **copy_comment（用户复制了评论）** —— 它才是北极星的正确测量：
+    comment 只说明「生成了」，copy 才说明「打算真的发出去」。产品承诺是「帮你开口」，
+    生成没发 = 没成功，所以「生成数」会高估价值（效度问题）。
+    """
+    _event((req.kind or "unknown")[:24], uid=(req.user_id or "")[:24],
+           name=(req.name or "")[:40], n=req.n)
+    return {"ok": True}
+
+
 @app.get("/api/oauth/status")
-def api_oauth_status():
+def api_oauth_status(user_id: str = ""):
     """前端据此决定显示「用知乎登录」还是「凭证未配置」的说明。"""
-    _event("visit")          # 每次页面加载会调一次 → 当作「访问」
+    # 带 uid：否则只能算 PV（页面加载次数），算不出 UV（多少**人**来过）
+    _event("visit", uid=(user_id or "")[:24])
     return {"ok": True, "configured": oauth.is_configured()}
 
 
