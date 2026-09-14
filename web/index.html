@@ -407,6 +407,9 @@ button.wide { width: 100%; }
   font-size: 12.5px; color: var(--sub); background: var(--brand-soft);
   border-radius: var(--r); padding: 11px 14px; margin-bottom: 20px; line-height: 1.7;
 }
+.search-tip { margin: 14px 0 8px; font-size: 12.5px; color: var(--sub); line-height: 1.65; }
+.search-tip b { color: var(--ink-soft); font-weight: 600; }
+
 .msg { margin-bottom: 18px; display: flex; flex-direction: column; animation: rise .45s cubic-bezier(.22,.9,.3,1) both; }
 .msg .who {
   font-size: 11.5px; color: var(--sub); margin-bottom: 6px;
@@ -418,6 +421,8 @@ button.wide { width: 100%; }
 }
 .msg.ta .who .av { background: linear-gradient(135deg, #6B8299, #93A9BC); }
 .msg.me .who .av { background: linear-gradient(135deg, var(--brand), #6BA3D0); }
+/* 真人用知乎头像时：去掉渐变底，改成圆形裁切 */
+.msg .who img.av { background: none; padding: 0; object-fit: cover; display: block; }
 .bub {
   padding: 13px 16px; border-radius: var(--r); font-size: 14.5px;
   max-width: 86%; white-space: pre-wrap; word-break: break-word; line-height: 1.72;
@@ -454,6 +459,13 @@ button.wide { width: 100%; }
   padding: 12px 14px; white-space: pre-wrap; max-width: 100%; box-shadow: var(--sh-1);
 }
 .pop.show { display: block; animation: rise .3s both; }
+.pop-close {
+  display: block; margin: 10px 0 0 auto; padding: 3px 13px;
+  font: inherit; font-size: 12px; color: var(--sub);
+  background: none; border: 1px solid var(--line); border-radius: 999px;
+  cursor: pointer; transition: color .2s, border-color .2s;
+}
+.pop-close:hover { color: var(--ink); border-color: var(--ink-soft); }
 
 .thinking { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--sub); padding: 8px 0; flex-wrap: wrap; }
 .thinking .t { color: var(--ink-soft); font-weight: 600; }
@@ -1026,6 +1038,9 @@ try {
       <div class="hi"><span class="n">2</span><span>我们读 TA 的公开创作，生成 TA 的数字分身</span></div>
       <div class="hi"><span class="n">3</span><span>让 TA 的分身先跟你聊两句 → 拿到一句能直接发出去的话</span></div>
     </div>
+
+    <p class="search-tip">建议挑 <b>公开内容多</b>的答主 —— TA 写过的回答、文章、想法越多，
+      读出来的分身越像本人。内容很少的人，只能给出一张「关注地图」。</p>
 
     <div class="row">
       <input type="text" id="nick" placeholder="输入 TA 的昵称，或粘贴 TA 的主页链接"
@@ -1781,9 +1796,17 @@ function addMsg(who, text, evidence = '', name = '', box = 'duel-log') {
     const label = document.createElement('div');
     label.className = 'who';
     // name === '你' → 真人本人说的话，不写「X 的分身」
-    label.innerHTML = name === '你'
-      ? `<span class="av">我</span>你`
-      : `<span class="av">${esc(initial)}</span>${esc((name || '') + ' 的分身')}`;
+    if (name === '你') {
+      // 真人：显示知乎头像 + 知乎用户名。只写「我」看不出是谁 ——
+      // 尤其 A2A 里两个分身在一来一回、中间夹着自己一句时。
+      const _p = (ZHIHU && ZHIHU.profile) || {};
+      const _ava = _p.avatar
+        ? `<img class="av" src="${esc(_p.avatar)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+        : `<span class="av">我</span>`;
+      label.innerHTML = `${_ava}${esc(myNameFromZhihu())}`;
+    } else {
+      label.innerHTML = `<span class="av">${esc(initial)}</span>${esc((name || '') + ' 的分身')}`;
+    }
     wrap.appendChild(label);
   }
   const bub = document.createElement('div');
@@ -1806,7 +1829,9 @@ function addMsg(who, text, evidence = '', name = '', box = 'duel-log') {
         const pop = document.createElement('div');
         pop.className = 'pop';
         pop.innerHTML = `<b>《${esc(rec.t)}》</b><br>${esc(rec.s)}` +
-          (rec.u ? `<br><a href="${esc(rec.u)}" target="_blank" rel="noopener">查看原文 ↗</a>` : '');
+          (rec.u ? `<br><a href="${esc(rec.u)}" target="_blank" rel="noopener">查看原文 ↗</a>` : '') +
+          `<button type="button" class="pop-close">收起</button>`;
+        pop.querySelector('.pop-close').onclick = () => pop.classList.remove('show');
         const c = document.createElement('span');
         c.className = 'chip'; c.textContent = '[' + id + '] ' + rec.t.slice(0, 16) + '…';
         c.onclick = () => pop.classList.toggle('show');
