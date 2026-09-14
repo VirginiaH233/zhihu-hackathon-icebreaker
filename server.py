@@ -1161,8 +1161,13 @@ def fetch_pins(token: str, limit: int = 20) -> list:
         ts = pin.get("created") or pin.get("updated") or 0
         when = time.strftime("%Y-%m", time.localtime(ts)) if ts else ""
         pid = pin.get("id") or ""
+        head = re.sub(r"\s+", " ", text).strip()
         out.append({
-            "title": "想法" + (f"（{when}）" if when else ""),
+            # 想法没有标题。以前拼成「想法（2026-09）」，两个后果：
+            #   ① 用户点开「依据」只看到一个日期，不知道这条是什么内容；
+            #   ② 模型也无从判断主题 —— 模块2「找你们共同感兴趣的话题」全靠标题比对。
+            # 改拿正文开头当标题。日期不进标题：素材本身按时间倒序，顺序已经说明新旧。
+            "title": head[:30] + ("…" if len(head) > 30 else ""),
             "summary": text[:BODY_LIMIT],
             "url": f"https://www.zhihu.com/pin/{pid}" if pid else "",
             "type": "Pin",

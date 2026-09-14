@@ -54,6 +54,38 @@ ROOT = Path(__file__).parent
 SIM_THRESHOLD = 0.03          # 相似度阈值：最高分低于此值 → 视为「没命中」
 
 
+# ---------- 分身 prompt 模板：从文件读，改文件即改行为 ----------
+# 规则与两个模板原来硬编码在本文件里 → 改 prompts/2-分身Agent.md 不生效，
+# 也就没法对 prompt 做对比测试。现在文件是唯一真相。
+_SOUL_TPL_PATH = ROOT / "prompts" / "2-分身Agent.md"
+_soul_cache = None
+
+
+def _soul_sections() -> dict:
+    """读 prompts/2-分身Agent.md，按 `=== 段名 ===` 切段（rules / a2a / chat）。"""
+    global _soul_cache
+    if _soul_cache is None:
+        text = _SOUL_TPL_PATH.read_text(encoding="utf-8")
+        if text.startswith("---"):                      # 去掉 frontmatter
+            text = text.split("---", 2)[2]
+        parts = re.split(r"^===\s*(\w+)\s*===\s*$", text, flags=re.M)
+        _soul_cache = {parts[i]: parts[i + 1].strip() for i in range(1, len(parts) - 1, 2)}
+    return _soul_cache
+
+
+def reload_soul_prompt() -> None:
+    """清缓存 —— 改完模板文件后调用（测试脚本用）。"""
+    global _soul_cache
+    _soul_cache = None
+
+
+def _fill(tpl: str, **kw) -> str:
+    """把 {{占位符}} 换成真实内容。"""
+    for k, v in kw.items():
+        tpl = tpl.replace("{{" + k + "}}", str(v))
+    return tpl
+
+
 class SoulAgent:
     """一个「有工具、有循环、有记忆」的分身 Agent"""
 
@@ -126,21 +158,17 @@ class SoulAgent:
         hist_text = "\n".join(f"用户：{u}\n分身：{a}" for u, a in self.history[-4:]) or "（这一轮是对话的开始）"
         topic_block = (f"\n【你们在聊的话题】{topic}\n"
                        f"（话题只是由头，不是要交的作业 —— 聊着聊着跑偏了也没关系）\n") if topic else ""
-        prompt = f"""你是「{self.name}」的分身——基于 TA 公开内容构建的思维镜像，**不是 AI 助手**。
-
-【TA 的人格】
-{self.persona}
-
-【检索到的资料】（内部参考，用户看不到）
-{lib_text}
-{topic_block}
-【对话历史】
-{hist_text}
-
-【用户的话】
-{user_msg}
-
-{CHAT_RULES.format(allowed=allowed)}"""
+        _sec = _soul_sections()
+        _rules = _fill(_sec["rules"], **{"允许的编号": allowed})
+        prompt = _fill(_sec["chat"], **{
+            "身份": f"你是「{self.name}」的分身——基于 TA 公开内容构建的思维镜像，**不是 AI 助手**。",
+            "人格": self.persona,
+            "资料库": lib_text,
+            "话题块": topic_block,
+            "历史": hist_text,
+            "用户的话": user_msg,
+            "规则": _rules,
+        })
         return self._llm(prompt)
 
     # ========== 完整的 Agent 循环 ==========
@@ -203,32 +231,9 @@ def _split_speech(raw: str) -> tuple:
     return ev, sp
 
 
-# ⚠️ 这套规则是**共用**的：A2A（speak_to）和「人 × TA 的分身」（_respond）都用它。
-# 以前两处各写一套，改了一边另一边就悄悄走样 —— 别再各写一份。
-_RULES_CORE = """规则（违反任何一条都算失败）：
-1. 你在**和一个人聊天**，不是回答问题、也不是汇报资料。可以追问、反驳、接梗、举例、说自己的看法、承认不知道。
-2. **事实必须真**：TA 的观点、经历、结论、数字、案例、人名，只能来自上面给你的内容；有就写【依据】[编号]，**只能引用这些编号**：{allowed}。**严禁编造不存在的编号，也严禁编造内容里没有的具体细节。**
-3. **说话方式不必有出处**：你的反应、感受、态度、追问、比方、常识都不需要依据，放开说。**你不需要每句话都有出处。**
-4. **不许说「这个我没写过」「不确定我写过没有」这类自指的话**。碰到不熟悉的，就像人一样说：「这个我不太懂，你咋看？」「这块我不太熟，你说说。」
-5. **每条发言至少包含一个「反应」**：对对方那句话的态度、感受，或一个追问。不能只输出自己的观点。
-6. 长度 1–3 句，**说人话**。禁一切 AI 腔（禁「作为一个AI」「希望对你有帮助」），禁列 1234 点，禁总结句（「总的来说」「综上所述」）。
-7. 保持 TA 的立场和口吻，**不要迎合对方**。该不同意就不同意，该追问就追问。
-8. 禁客套（「很高兴认识你」「感谢分享」）。直接进入内容。
-9. **【依据】里只写编号，或者留空。** 不要解释「为什么这轮没有依据」—— 那种解释是噪音。
-"""
-
-SPEAK_RULES = _RULES_CORE + """
-输出格式（两段）：
-【依据】…
-【发言】…"""
-
-# 「人 × TA 的分身」用同一套内核；段名不同，且要说清「话题只是由头」
-CHAT_RULES = _RULES_CORE + """
-【对话历史】和【你们在聊的话题】是上下文，不是任务书：话题只是由头，聊天本身才是重点。
-
-输出格式（两段）：
-【依据】…
-【回应】…"""
+# 分身规则与两个模板已移到 `prompts/2-分身Agent.md`（改文件即改行为）。
+# 以前这套规则硬编码在这里 —— 结果是「改 prompt 文件对产品没有任何影响」，
+# 也就没法给 prompt 做对比测试。别再搬回来。
 
 
 def speak_to(self, peer_key: str, peer_name: str, dialogue: list,
@@ -273,25 +278,20 @@ def speak_to(self, peer_key: str, peer_name: str, dialogue: list,
         task = ("这场对话由你主动开口。你在知乎看到了「%s」这个人，想认识 TA。"
                 "先说一句你真正想说的或想知道的——**不要自我介绍开场**，直接进入内容。" % peer_name)
 
-    prompt = f"""{me}
-
-【你（TA）的人格】
-{self.persona}
-
-【你（TA）写过的内容】（内部参考，对方看不到）
-{lib_text}
-
-【正在和你对话的人】
-对方是「{peer_name}」{'' if not as_self else '——一个真实的人和 TA 的分身'}。
-**你只看得到对方说的话，看不到对方的资料、经历、底细。**
-
-【对话现场】
-{scene}
-
-【当前任务】
-{task}
-
-{SPEAK_RULES.format(allowed=allowed)}"""
+    _sec = _soul_sections()
+    _rules = _fill(_sec["rules"], **{"允许的编号": allowed})
+    _peer = (f"对方是「{peer_name}」"
+             f"{'' if not as_self else '——一个真实的人和 TA 的分身'}。\n"
+             "**你只看得到对方说的话，看不到对方的资料、经历、底细。**")
+    prompt = _fill(_sec["a2a"], **{
+        "身份": me,
+        "人格": self.persona,
+        "资料库": lib_text,
+        "对方": _peer,
+        "现场": scene,
+        "任务": task,
+        "规则": _rules,
+    })
 
     # 生成 + 校验：模型偶发会吐异常格式（只输出编号），检出就重试一次
     ev, sp = "", ""

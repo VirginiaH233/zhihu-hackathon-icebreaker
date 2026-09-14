@@ -1791,7 +1791,10 @@ function addMsg(who, text, evidence = '', name = '', box = 'duel-log') {
   bub.textContent = text;
   wrap.appendChild(bub);
 
-  if (who === 'ta' || who === 'me') {
+  // 依据只属于「分身」：真人自己说的话没有依据可言，也不该显示「无」。
+  // 注意 who='me' 有两种身份 —— A2A 里的一个分身（要显示）和真人本人（不显示），
+  // 所以判据用 name==='你'（真人标记），不能用 who。
+  if (who !== 'sys' && name !== '你') {
     const basis = document.createElement('div');
     basis.className = 'basis';
     basis.innerHTML = '<span class="lb">依据</span>';
@@ -2011,7 +2014,7 @@ async function unlockBoth() {
   try {
     const d = await jpost('/api/me', { user_id: uid, name: myNameFromZhihu(), intro: '' });
     if (!d.ok) { toast(d.error || '没读成，稍后再试', 3800); return; }
-    toast(`好了 · 基于你在知乎的 ${d.count} 条创作`, 3000);
+    toast(`你的分身已就绪 · 基于你在知乎的 ${d.count} 条创作`, 3000);
     await loadMe();
     openData = null;
     await loadOpening();
@@ -2640,7 +2643,7 @@ async function buildMeInline() {
   try {
     const d = await jpost('/api/me', { user_id: uid, name, intro: '' });
     if (!d.ok) { toast(d.error || '生成失败', 3800); return; }
-    toast(`好了 · 基于你在知乎的 ${d.count} 条创作`, 3000);
+    toast(`你的分身已就绪 · 基于你在知乎的 ${d.count} 条创作`, 3000);
     await loadMe();
   } catch (e) { toast('出错：' + e.message); }
   finally { stopProgress(); b.disabled = false; b.textContent = '用知乎账号登录并生成'; }
@@ -2735,7 +2738,7 @@ async function buildMe() {
   try {
     const d = await jpost('/api/me', { user_id: uid, name, intro });
     if (!d.ok) { toast(d.error || '生成失败', 3800); return; }
-    toast(`好了 · 基于你在知乎的 ${d.count} 条创作`, 3000);
+    toast(`你的分身已就绪 · 基于你在知乎的 ${d.count} 条创作`, 3000);
     await loadMe();
   } catch (e) { toast('出错：' + e.message); }
   finally { stopProgress(); b.disabled = false; b.textContent = '用知乎账号登录并生成'; }
