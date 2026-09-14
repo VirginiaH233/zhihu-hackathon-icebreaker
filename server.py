@@ -657,6 +657,58 @@ def api_history(user_id: str):
     return {"ok": True, "items": (rec or {}).get("items") or []}
 
 
+@app.get("/api/stats")
+def api_stats():
+    """使用情况统计（只返回聚合数字 + 公开答主名，不含任何用户内容）。
+
+    用途：产品上线后「根据使用记录优化」的依据 —— 看有多少人真的用过、
+    哪些答主被聊得最多（该预热谁）、有多少人走到「生成评论」这一步。
+    """
+    def _count(d) -> int:
+        try:
+            return sum(1 for _ in d.glob("*.json"))
+        except Exception:
+            return 0
+
+    hot: dict = {}        # 答主 -> 被聊次数（跨所有用户聚合）
+    talked_users = 0      # 有过聊天记录的用户数
+    with_comment = 0      # 走到「生成评论」这一步的用户数
+    try:
+        for f in HISTORY_DIR.glob("*.json"):
+            rec = _load_json(f, None) or {}
+            items = rec.get("items") or []
+            if not items:
+                continue
+            talked_users += 1
+            if any((x.get("comments") or 0) > 0 for x in items):
+                with_comment += 1
+            for it in items:
+                k = (it.get("name") or "").strip()
+                if k:
+                    hot[k] = hot.get(k, 0) + 1
+    except Exception:
+        pass
+
+    # TA 档案按模式分（soul=画了人格；profile=素材薄，只画了关注地图）
+    modes: dict = {}
+    try:
+        for f in SOULS_DIR.glob("*.json"):
+            m = (_load_json(f, None) or {}).get("mode") or "soul"
+            modes[m] = modes.get(m, 0) + 1
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "users": _count(USERS_DIR),          # 生成过分身的人数
+        "souls": _count(SOULS_DIR),          # 被读过的答主数
+        "soul_modes": modes,                 # 人格 / 关注地图 各多少
+        "talked_users": talked_users,        # 真的聊过的人
+        "with_comment": with_comment,        # 聊完还拿了评论的人
+        "hot": sorted(hot.items(), key=lambda x: -x[1])[:12],   # 热门答主
+    }
+
+
 # ==================== 第四幕开局：TA 的分身先开口 + 双模块话题 ====================
 
 class OpenReq(BaseModel):
