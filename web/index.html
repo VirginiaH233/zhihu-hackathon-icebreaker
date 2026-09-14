@@ -1242,6 +1242,10 @@ try {
       <button class="ghost" onclick="dlCard(1)">普通尺寸</button>
     </div>
     <p class="modal-tip" id="card-tip">手机上如果点按钮没反应，长按下面的图保存即可。</p>
+    <div id="card-savable" style="display:none;margin-top:12px">
+      <div style="font-size:12px;color:var(--sub);margin-bottom:6px;text-align:center">↑ 长按这张图可以直接存到相册</div>
+      <img id="card-img" alt="我的知乎人格分享卡" style="width:100%;border-radius:14px;box-shadow:0 10px 30px rgba(30,30,30,.14)">
+    </div>
   </div>
 </div>
 
@@ -1820,7 +1824,13 @@ function buildCardSVG(d) {
 </svg>`;
 }
 
-function closeCard() { $('card-modal').classList.remove('show'); }
+function closeCard() {
+  $('card-modal').classList.remove('show');
+  // 清掉上一张卡，免得下次打开先闪一眼旧图
+  $('card-savable').style.display = 'none';
+  $('card-img').removeAttribute('src');
+  cardData = null;
+}
 
 async function makeShareCard() {
   const stage = $('card-stage'), tip = $('card-tip');
@@ -1832,37 +1842,65 @@ async function makeShareCard() {
     if (!d.ok) { stage.innerHTML = '<p style="padding:36px 0;color:#c9542f;font-size:13px">' + (d.error || '生成失败') + '</p>'; return; }
     cardData = d;
     stage.innerHTML = buildCardSVG(d);
-    tip.textContent = '手机上如果点按钮没反应，长按上面的卡片保存即可。';
+    tip.textContent = '手机上如果点按钮没反应，长按下面的图保存即可。';
+    showSavableImage(2);        // 提前把图备好，手机上直接长按就存
   } catch (e) {
     stage.innerHTML = '<p style="padding:36px 0;color:#c9542f;font-size:13px">网络出了点问题，再试一次</p>';
   }
 }
 
-/** 导出 PNG：SVG → canvas → 下载（先铺不透明底，避免存出来变黑） */
+/** 把卡片渲染成 canvas（导出与「可长按保存」共用） */
+function renderCardCanvas(scale) {
+  return new Promise((resolve, reject) => {
+    const svg = $('card-stage').querySelector('svg');
+    if (!svg) return reject(new Error("没有卡片"));
+    const vb = _cvb(svg), W = +vb[2], H = +vb[3];
+    const clone = svg.cloneNode(true);
+    clone.setAttribute("width", W); clone.setAttribute("height", H);
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)],
+      { type: "image/svg+xml;charset=utf-8" }));
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = W * scale; c.height = H * scale;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#fffdf9"; ctx.fillRect(0, 0, c.width, c.height);   // 铺不透明底，避免存出来变黑
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("SVG 转图片失败")); };
+    img.src = url;
+  });
+}
+
+/** 导出 PNG。⚠️ 手机上执行 a.download + dataURL 经常**静默失败**（尤其 iOS Safari），
+ *  所以这里同时把图挂到页面上让用户长按保存 —— 那条路在手机上一定可用。 */
 async function dlCard(scale) {
-  const svg = $('card-stage').querySelector('svg');
-  if (!svg) return;
-  const vb = _cvb(svg), W = +vb[2], H = +vb[3];
-  const clone = svg.cloneNode(true);
-  clone.setAttribute("width", W); clone.setAttribute("height", H);
-  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)],
-    { type: "image/svg+xml;charset=utf-8" }));
-  const img = new Image();
-  img.onload = () => {
-    const c = document.createElement("canvas");
-    c.width = W * scale; c.height = H * scale;
-    const ctx = c.getContext("2d");
-    ctx.fillStyle = "#fffdf9"; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.drawImage(img, 0, 0, c.width, c.height);
-    URL.revokeObjectURL(url);
+  const tip = $('card-tip');
+  try {
+    const c = await renderCardCanvas(scale);
+    const blob = await new Promise(r => c.toBlob(r, "image/png"));   // toBlob 比 dataURL 兼容好
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.download = "知乎人格-" + (cardData && cardData.name ? cardData.name : "我") + ".png";
-    a.href = c.toDataURL("image/png");
+    a.href = url;
     document.body.appendChild(a); a.click(); a.remove();
-    $('card-tip').textContent = "✓ 已保存（" + c.width + "×" + c.height + "）";
-  };
-  img.onerror = () => { URL.revokeObjectURL(url); $('card-tip').textContent = "导出失败，长按卡片保存试试"; };
-  img.src = url;
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    tip.textContent = "✓ 已保存（" + c.width + "×" + c.height + "）";
+  } catch (e) {
+    tip.textContent = "直接下载没成功 —— 往下看，长按那张图保存即可";
+  }
+  showSavableImage(scale);      // 无论下载成不成功，都给一条手机上走得通的路
+}
+
+/** 在弹窗下方挂一张图（手机上长按即可存相册） */
+async function showSavableImage(scale) {
+  try {
+    const c = await renderCardCanvas(scale || 2);
+    $('card-img').src = c.toDataURL("image/png");
+    $('card-savable').style.display = 'block';
+  } catch (e) {}
 }
 
 async function startDuel() {
@@ -3016,13 +3054,15 @@ async function checkOauth() {
       $('o-desc').textContent = '你的分身会优先来自你自己的知乎创作';
       $('o-btn').style.display = 'none';
       $('o-out').style.display = 'inline-block';
-      // OAuth 回来自动生成分身（不让用户多点一步）
+      // ⚠️ 这里原来会「登录后自动弹抽屉 + 自动生成人格画像」—— 实测这是**最大的流失点**：
+      // 用户还没体验到任何东西，就先等一分钟读创作、还被迫看一个抽屉。
+      // 现在改成：登录后**留在主页面**，直接可以去搜人聊天（真人 × TA 的分身不需要你的档案）。
+      // 只在这两处才需要分身：① 最后想让两个分身见一面（A2A 彩蛋）② 用户自己点开个人中心。
       const meData = await (await fetch('/api/me?user_id=' + uid)).json();
-      if (!meData.exists) {
-        openDrawer();
-        await buildMeInline();
-      } else if (new URLSearchParams(location.search).has('oauth')) {
-        openDrawer();
+      ME = meData && meData.exists ? meData : null;
+      renderTop();
+      if (new URLSearchParams(location.search).has('oauth') && !meData.exists) {
+        toast('已登录。直接搜一个人就能开聊 —— 想要自己的分身，点右上角', 4200);
       }
     } else {
       if (!_devLocal) gateShow(true);   // 未登录 → 只给登录门（本地开发豁免）
