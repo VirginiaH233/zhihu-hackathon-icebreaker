@@ -69,7 +69,53 @@ async def _on_unhandled(request: Request, exc: Exception):
                         content={"ok": False, "error": "服务器出了点问题，再试一次"})
 
 
-SESSIONS: dict[str, SoulAgent] = {}      # session_id -> Agent
+SESSIONS: dict[str, SoulAgent] = {}      # session_id -> Agent（内存缓存，真源在磁盘）
+
+
+def _save_session(sid: str, agent: "SoulAgent") -> None:
+    """会话落盘。
+
+    ⚠️ 为什么必须落盘：SESSIONS 原来只在内存，而**每次部署都会重启容器** ——
+    内存一清空，正在聊的人当场被踢断（表现为「出不了话题」「卡片没写出来」
+    「会话已失效」，而且失败得很安静）。这不是偶发，是每次发布会必然发生一次。
+    """
+    if not sid:
+        return
+    try:
+        _save_json(SESSIONS_DIR / f"{_safe_key(sid)}.json", {
+            "sid": sid,
+            "name": agent.name,
+            "persona": agent.persona,
+            "library": agent.library,
+            "history": agent.history,
+            "is_self": agent.is_self,
+            "key": agent.key,
+            "updated": int(time.time()),
+        })
+    except Exception as e:
+        print(f"  ⚠️ 会话存盘失败（不影响聊天）：{type(e).__name__}: {e}")
+
+
+def _get_session(sid: str):
+    """取会话：先看内存；内存没有就从磁盘恢复（部署/重启后照样接得上，用户无感）。"""
+    if not sid:
+        return None
+    a = SESSIONS.get(sid)
+    if a is not None:
+        return a
+    try:
+        rec = _load_json(SESSIONS_DIR / f"{_safe_key(sid)}.json", None)
+    except Exception:
+        return None          # sid 本身非法（含奇怪字符等）→ 当作没有会话，别抛 400 给用户
+    if not rec:
+        return None
+    a = SoulAgent(name=rec.get("name") or "", persona=rec.get("persona") or "",
+                  library=rec.get("library") or [], verbose=False)
+    a.history = rec.get("history") or []
+    a.is_self = bool(rec.get("is_self"))
+    a.key = rec.get("key") or ""
+    SESSIONS[sid] = a
+    return a
 SOUL_CACHE: dict[str, dict] = {}         # 昵称 -> {persona, library, name}（省额度：同名不重建）
 
 # ============================================================
@@ -77,6 +123,7 @@ SOUL_CACHE: dict[str, dict] = {}         # 昵称 -> {persona, library, name}（
 # ============================================================
 DATA = ROOT / "data"
 USERS_DIR = DATA / "users"     # 你的分身（持久，可编辑）
+SESSIONS_DIR = DATA / "sessions"       # 会话落盘（部署重启后照样接得上）
 SOULS_DIR = DATA / "souls"     # TA 的灵魂档案（缓存，可复用、可预热）
 HISTORY_DIR = DATA / "history" # 每个用户「聊过谁」（按 uid 归属，给个人抽屉的入口用）
 EVENTS_DIR = DATA / "events"   # 使用事件流（按天 jsonl）—— 漏斗分析用
@@ -100,6 +147,9 @@ def _load_json(path: Path, default):
 
 
 def _save_json(path: Path, obj):
+    # ⚠️ 必须先建目录：原来不建，目录不存在时 write_text 直接抛异常，
+    #    调用方若包了 try 就会「静默写不进去」（会话落盘就这样白干过一次）。
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
 
 # ============================================================
@@ -608,6 +658,7 @@ def api_load(req: LoadReq):
            cached=from_cache, n=len(library))
     sid = uuid.uuid4().hex
     SESSIONS[sid] = SoulAgent(name=author, persona=persona, library=library, verbose=False)
+    _save_session(sid, SESSIONS[sid])
     return {
         "ok": True,
         "session_id": sid,
@@ -625,13 +676,14 @@ def api_load(req: LoadReq):
 @app.post("/api/chat")
 def api_chat(req: ChatReq):
     """和分身对话（真 Agent：检索 → 回应 → 记忆）"""
-    agent = SESSIONS.get(req.session_id)
+    agent = _get_session(req.session_id)
     if not agent:
         return {"ok": False, "error": "会话已失效，请重新开始"}
     if not req.message.strip():
         return {"ok": False, "error": "说点什么吧"}
 
     reply = agent.chat(req.message, topic=req.topic)
+    _save_session(req.session_id, agent)          # 每轮都存：会话丢了也能从磁盘接回来
     _record_history(req.user_id, agent.name, topic=req.topic)   # 让「我聊过的人」当天就有内容
     # ⚠️ 模型输出是两段（【依据】…/【回应】…）—— 必须拆开再给前端，
     # 否则界面上会原样显示「【依据】[12] 【回应】…」，很难看。
@@ -876,7 +928,7 @@ def api_opening(req: OpenReq):
     - 模块2「你们可能都感兴趣的」：**必须用户先有自己的档案** —— 没有就返回 locked，
       前端显示锁态卡片让用户主动按（不静默生成，见 v5 决策）
     """
-    ta = SESSIONS.get(req.session_id)
+    ta = _get_session(req.session_id)
     if not ta:
         raise HTTPException(status_code=404, detail="会话已失效，请重新开始")
 
@@ -937,7 +989,7 @@ def sse(obj: dict) -> str:
 @app.post("/api/duel")
 def api_duel(req: DuelReq):
     """A2A：你的分身 × TA 的分身。SSE 流式——前端能逐条看到它们说话。"""
-    ta = SESSIONS.get(req.session_id)
+    ta = _get_session(req.session_id)
     if not ta:
         raise HTTPException(status_code=404, detail="会话已失效，请重新开始")
     # 「你」必须来自存档：用户用知乎授权建的分身（persona/library 来自他本人的创作）。
@@ -1028,7 +1080,7 @@ def api_comment(req: CommentReq):
     依据地基：**只用 TA 公开发布的内容**（标题 + 摘要）。
     对话记录只用来判断这个人想问什么 —— 每条评论都挂着它的出处，用户能自己核。
     """
-    ta = SESSIONS.get(req.session_id)
+    ta = _get_session(req.session_id)
     if not ta:
         raise HTTPException(status_code=404, detail="会话已失效，请重新开始")
 
@@ -1171,7 +1223,7 @@ def api_sharecard(req: ShareReq):
 @app.post("/api/icebreak")
 def api_icebreak(req: IceReq):
     """破冰卡：看完整场对话后，给用户一张能直接用的卡。"""
-    ta = SESSIONS.get(req.session_id)
+    ta = _get_session(req.session_id)
     if not ta:
         return {"ok": False, "error": "会话已失效，请重新开始"}
     if not req.dialogue:
@@ -1199,7 +1251,7 @@ class MatchReq(BaseModel):
 def api_match(req: MatchReq):
     """兴趣匹配卡：TA 的素材太薄时**不做双分身对谈**（没有语言样本，对谈只会客套），
     直接比两边「关注地图」的重合，给一张卡 + 破冰话术。"""
-    ta = SESSIONS.get(req.session_id)
+    ta = _get_session(req.session_id)
     if not ta:
         return {"ok": False, "error": "会话已失效，请重新开始"}
     rec = _load_json(USERS_DIR / f"{_safe_key(req.user_id)}.json", None) if req.user_id else None

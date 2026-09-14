@@ -2034,6 +2034,7 @@ const BUSY_HINTS = {
   comment: ['在 TA 写过的内容里找能接的话…', '尽量不夸、只说人话…', '挑一句最不容易尴尬的开场…'],
   card:    ['把刚才那几句来回读一遍…', '试着说清 TA 是个什么样的人…', '再挑两个你可能没想到的点…'],
   match:   ['把两边关注的东西摆在一起…', '找重合的地方…', '想两句不尬的开场白…'],
+  me:      ['正在读你写过的那些东西…', '在整理你平时在意什么…', '再找找你和 TA 都在意的事…'],
   search:  ['正在知乎搜这个名字…', '按作者名筛一遍…',
             '这个名字不好搜？换个词再试一次…', '再换一种说法找找…', '快到候选了…'],
 };
@@ -2154,8 +2155,9 @@ async function startTalk() {
   $('btn-duel').disabled = false;
 }
 
-/** 要一次开局（TA 先开口 + 两组话题）。解锁档案后也会再调一次。 */
-async function loadOpening() {
+/** 要一次开局（TA 先开口 + 两组话题）。解锁档案后也会再调一次。
+ *  opts.unlocked = 刚读完的「我的公开创作」条数（有值 = 这是解锁后的那次刷新，要说结果） */
+async function loadOpening(opts = {}) {
   const t = showThinking(taName + ' 的分身 正在准备开口…', 'talk-log', 'opening');
   try {
     const d = await jpost('/api/opening', { session_id: sid, user_id: uid, signature: taSig });
@@ -2169,6 +2171,24 @@ async function loadOpening() {
       `看不见你的资料、经历、底细 —— 和你跟真人聊天时的处境一样。`;
     renderTopics(d.modules || []);
     $('talk-wheel').style.display = 'flex';
+
+    const both = (d.modules || []).find(m => m.key === 'both');
+    const bothN = (both && (both.topics || []).length) || 0;
+    if (opts.unlocked != null) {
+      // 刚解锁完 —— 把结果说清楚，并把人带到话题那儿去（原来这里静默重画，等于没发生）
+      addMsg('sys', bothN
+        ? `读到你在知乎的 ${opts.unlocked} 条公开创作 —— 「你们可能都感兴趣的」出来了 ${bothN} 个，就在下面 ↓`
+        : `读到你在知乎的 ${opts.unlocked} 条公开创作。这一轮没找到你们重叠的领域（不硬凑）—— `
+          + `先从「他最在行的」里挑一个也行。`,
+        '', '', 'talk-log');
+      $('talk-topics').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else if (both && both.locked && !ME) {
+      // 流程提前：一进第四幕就把这个选项说出来。
+      // 原来是摆个锁卡片等人自己发现 —— 结果用户是「聊到一半想换话题」时才撞见它，
+      // 那会儿她正想聊，反而被打断。
+      addMsg('sys', '想聊「你们可能都感兴趣的」？那得先让我读一下你在知乎写过的东西 —— '
+        + '下面那一组里按一下就行，读完这组话题就出来了。', '', '', 'talk-log');
+    }
   } catch (e) {
     if (t) t.remove();
     addMsg('sys', '（出错：' + e.message + '）', '', '', 'talk-log');
@@ -2311,19 +2331,36 @@ async function moreTopics() {
   $('talk-topics').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-/** 解锁模块 2：读用户自己的公开创作（要知乎授权；只在用户按了之后才做） */
+/** 解锁模块 2：读用户自己的公开创作（要知乎授权；只在用户按了之后才做）
+ *
+ * ⚠️ 原来这里只弹一个 2.5 秒的 toast，而后面「读素材 + 生成档案」要几十秒 ——
+ * 那几十秒屏幕上一个字都不动，用户看到的就是「按了没反应」。现在改成：
+ * ① 就地放一个会轮换文案的等待块（复用 showThinking 的 2.6 秒换一句）
+ * ② 读完给留在页面上的结果（读了多少条 + 解锁了哪一组）
+ * ③ 失败也留在页面上说人话，不是一闪而过
+ */
 async function unlockBoth() {
   const okToGo = await ensureZhihuLogin();
   if (!okToGo) return;
-  toast('正在读你的公开创作…', 2500);
+  const box = $('talk-topics');
+  box.innerHTML = '';
+  const busy = showBusy('talk-topics', 'me', '正在读你的公开创作');
   try {
     const d = await jpost('/api/me', { user_id: uid, name: myNameFromZhihu(), intro: '' });
-    if (!d.ok) { toast(d.error || '没读成，稍后再试', 3800); return; }
-    toast(`你的分身已就绪 · 基于你在知乎的 ${d.count} 条创作`, 3000);
-    await loadMe();
+    busy.stop();
+    if (!d.ok) {
+      box.innerHTML = `<div class="tk-locked"><div class="t"><b>这会儿没读成。</b><br>` +
+        `${esc(d.error || '过一会儿再试一次')}</div></div>`;
+      return;
+    }
     openData = null;
-    await loadOpening();
-  } catch (e) { toast('出错：' + e.message); }
+    await loadMe();
+    toast(`读到你在知乎的 ${d.count} 条公开创作`, 3200);
+    await loadOpening({ unlocked: d.count });
+  } catch (e) {
+    busy.stop();
+    box.innerHTML = `<div class="tk-locked"><div class="t"><b>读的时候出错了。</b><br>${esc(e.message)}</div></div>`;
+  }
 }
 
 function finishTalk() {
