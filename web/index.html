@@ -1200,7 +1200,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
     <div id="talk-topics" class="talk-topics"></div>
 
     <div class="topic-now" id="talk-now" style="display:none">
-      正在聊：<b id="talk-now-t"></b><span class="chg" onclick="moreTopics()">换一个</span>
+      正在聊：<b id="talk-now-t"></b><span class="chg" onclick="moreTopics()">换一批</span>
     </div>
 
     <div class="talk-input" id="talk-input">
@@ -1211,7 +1211,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
 
     <!-- 常驻方向盘 -->
     <div class="talk-wheel" id="talk-wheel" style="display:none">
-      <button class="ghost" onclick="moreTopics()">我还想聊聊别的</button>
+      <button class="ghost" onclick="moreTopics()">换一批话题</button>
       <button class="ghost" onclick="finishTalk()">我聊完了</button>
     </div>
   </div>
@@ -2138,7 +2138,13 @@ function addMsg(who, text, evidence = '', name = '', box = 'duel-log') {
    ============================================================ */
 let curTopic = '';       // 这场聊天是由哪个话题起的头
 let openData = null;     // /api/opening 的原始结果（含两组话题）
-let shownTopics = [];    // 已经摆出来过的话题（「我还想聊聊别的」不重复摆）
+let shownTopics = [];    // 摆过的话题（只作记录，不再用它排除 —— 见下方 topicCursor 说明）
+// ⚠️ 「换一批」= 循环翻页，不是"看过就消失"：
+//    原来的做法是「摆过的话题永久排除」，结果两头都不对 ——
+//    ① 错过的话题再也回不来（用户看到一半想回头找，找不着）；
+//    ② 全看过之后要重新调模型生成一批（几十秒，且完全没必要）。
+//    现在每个模块各有一个游标，点「换一批」就往后翻 3 个、翻到底自动回绕。
+let topicCursor = {};    // { 模块key: 下一个要摆的位置 }
 let usedTopics = [];     // 用户真正聊过的话题
 let talkRounds = 0;      // 用户发了几条
 
@@ -2149,7 +2155,7 @@ async function startTalk() {
   $('talk-topics').innerHTML = '';
   $('talk-wheel').style.display = 'none';
   dialogue = []; myTalk = []; talkRounds = 0; curTopic = '';
-  openData = null; shownTopics = []; usedTopics = [];
+  openData = null; shownTopics = []; topicCursor = {}; usedTopics = [];
   $('stage-talk').scrollIntoView({ behavior: 'smooth', block: 'start' });
   await loadOpening();
   $('btn-duel').disabled = false;
@@ -2213,14 +2219,18 @@ function renderTopics(mods) {
   (mods || []).forEach(m => {
     const sec = document.createElement('div');
     sec.className = 'tk-mod';
-    const fresh = (m.topics || []).filter(tp => !shownTopics.includes(tp.text));
-    // 一次只摆 3 个 —— 剩下的留给「我还想聊聊别的」，别一次砸一脸
-    const rest = fresh.slice(0, 3);
-    rest.forEach(tp => shownTopics.push(tp.text));
+    const all = (m.topics || []);
+    // 循环取 3 个：到末尾自动绕回开头，「换一批」永远有得换、也不会漏掉任何话题
+    const cur = topicCursor[m.key] || 0;
+    const take = Math.min(3, all.length);
+    const rest = [];
+    for (let i = 0; i < take; i++) rest.push(all[(cur + i) % all.length]);
+    topicCursor[m.key] = take ? (cur + take) % all.length : 0;
+    rest.forEach(tp => { if (!shownTopics.includes(tp.text)) shownTopics.push(tp.text); });
     const hd = document.createElement('div');
     hd.className = 'tk-lb';
     hd.innerHTML = esc(m.label) + (m.locked ? '' :
-      `<span>${fresh.length - rest.length > 0 ? '还有 ' + (fresh.length - rest.length) + ' 个' : '都看过了'}</span>`);
+      (all.length > 3 ? `<span>共 ${all.length} 个 · 换一批看别的</span>` : ''));
     sec.appendChild(hd);
 
     if (m.locked) {
@@ -2236,12 +2246,10 @@ function renderTopics(mods) {
       b.onclick = unlockBoth;
       card.appendChild(b);
       sec.appendChild(card);
-    } else if (!fresh.length) {
+    } else if (!rest.length) {
       const note = document.createElement('div');
       note.className = 'talkhead';
-      note.textContent = (m.topics && m.topics.length)
-        ? '这些你都聊过了。'
-        : '没找到你们重叠的领域 —— 共同话题少，反而更得挑个由头开口。';
+      note.textContent = '没找到你们重叠的领域 —— 共同话题少，反而更得挑个由头开口。';
       sec.appendChild(note);
     } else {
       rest.forEach(tp => sec.appendChild(_topicChip(tp)));
@@ -2318,18 +2326,15 @@ async function sendTalk() {
   } finally { b.disabled = false; inp.focus(); }
 }
 
-/** 我还想聊聊别的：先把没摆过的摆出来；都摆过了就再要一批 */
+/** 换一批：从已有话题里翻下一批 3 个（循环，不重新调模型）
+ *
+ * 原来这里是「先把没摆过的摆出来，都摆过了就重新生成一批」——
+ * 重新生成要几十秒（模型现算），而话题本来就有七八个，
+ * 翻完一轮再绕回开头完全够用。所以改成纯翻页。
+ */
 async function moreTopics() {
   if (!openData) { await loadOpening(); return; }
-  const before = shownTopics.length;
   renderTopics(openData.modules || []);
-  const left = (openData.modules || []).some(m => !m.locked &&
-    (m.topics || []).some(tp => !shownTopics.includes(tp.text)));
-  if (!left) {
-    toast('再给你一批新话题…', 2200);
-    openData = null;
-    await loadOpening();
-  }
   $('talk-topics').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
