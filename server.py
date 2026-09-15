@@ -679,6 +679,18 @@ def api_load(req: LoadReq):
     }
 
 
+# 模型弹回「平台默认身份」或「客服式拒答」时的特征词。
+# ⚠️ 这些词**只能用于检测**，绝不能写进 prompt —— 实测写进去模型会直接照着念（踩过）。
+_BOUNCE_MARKS = ("知乎直答", "无法针对您的问题", "作为一个AI", "作为一个 AI", "作为一个Ai",
+                 "作为一个 AI 助手", "我可以帮您回答")
+
+
+def _is_bounced(text: str) -> bool:
+    """模型是不是弹回了平台身份/客服拒答（而不是在用分身的身份说话）。"""
+    t = text or ""
+    return any(m in t for m in _BOUNCE_MARKS)
+
+
 @app.post("/api/chat")
 def api_chat(req: ChatReq):
     """和分身对话（真 Agent：检索 → 回应 → 记忆）"""
@@ -689,6 +701,22 @@ def api_chat(req: ChatReq):
         return {"ok": False, "error": "说点什么吧"}
 
     reply = agent.chat(req.message, topic=req.topic)
+    # ⚠️ 模型有个躲不掉的行为：被问到「你是谁 / 你是不是 AI」时会弹回**平台默认身份**
+    #    （「我是知乎直答…」），有时还会弹成客服式拒答。这是模型的对齐机制，
+    #    **prompt 里写规则压不住**（实测：写了照样弹）。
+    #    所以在这里兜一层：撤回这一轮 → 加一句提醒重问 → 还弹就换成人话，
+    #    绝不让用户看到那句自我介绍或「抱歉我无法回答」。
+    if _is_bounced(reply):
+        if agent.history:
+            agent.history.pop()                  # 撤回这轮，别让默认身份留在记忆里
+        retry = agent.chat_plain(req.message, topic=req.topic)   # 换极简 prompt（实测这条稳）
+        if not _is_bounced(retry):
+            reply = retry
+        else:
+            if agent.history:
+                agent.history.pop()
+            reply = ("【依据】\n【回应】这个我还真答不上来 —— 要不咱还是聊他写过的东西？"
+                     "你想从哪块说起。")
     _save_session(req.session_id, agent)          # 每轮都存：会话丢了也能从磁盘接回来
     _record_history(req.user_id, agent.name, topic=req.topic, sid=req.session_id)   # 让「我聊过的人」当天就有内容
     # ⚠️ 模型输出是两段（【依据】…/【回应】…）—— 必须拆开再给前端，

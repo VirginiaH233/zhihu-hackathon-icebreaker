@@ -172,6 +172,27 @@ class SoulAgent:
         return self._llm(prompt)
 
     # ========== 完整的 Agent 循环 ==========
+    def chat_plain(self, user_msg: str, topic: str = "") -> str:
+        """兜底专用：用**极简 prompt** 重说一遍。
+
+        ⚠️ 什么时候用：正常路（chat()）模型弹回了平台身份或客服拒答 —— 见 server.py `_is_bounced`。
+        为什么要它：完整 prompt（人格 + 资料 + 全部规矩）偶尔会被模型**整体拒演**，
+        但极简 prompt（就说你是谁 + 用户的话）**实测稳定**。
+        代价：这一步不带资料库、不守全部规矩 —— 但总比让用户看到一句「我是某搜索产品」强。
+        """
+        hist = "\n".join(f"用户：{u}\n分身：{a}" for u, a in self.history[-4:]) or "（刚开场）"
+        prompt = (
+            f"你是「{self.name}」的分身 —— 照着 TA 公开写过的内容做出来的，说话用 TA 的语气。\n"
+            f"你正在和一个人聊天，把话说完整就行。\n\n"
+            f"【TA 是谁】\n{(self.persona or '')[:1200]}\n\n"
+            f"【刚才聊了】\n{hist}\n\n"
+            f"【用户的话】\n{user_msg}\n\n"
+            f"直接回话（不要写【依据】/【回应】，不要做自我介绍）："
+        )
+        answer = self._llm(prompt)
+        self.history.append((user_msg, answer))
+        return answer
+
     def chat(self, user_msg: str, topic: str = "") -> str:
         query = self._build_query(user_msg)              # 组装检索查询
         hits = self._retrieve(query)                     # ① 检索（代码真的执行）
