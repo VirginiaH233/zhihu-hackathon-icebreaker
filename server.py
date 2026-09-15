@@ -72,7 +72,7 @@ async def _on_unhandled(request: Request, exc: Exception):
 SESSIONS: dict[str, SoulAgent] = {}      # session_id -> Agent（内存缓存，真源在磁盘）
 
 
-def _save_session(sid: str, agent: "SoulAgent") -> None:
+def _save_session(sid: str, agent: "SoulAgent", uid: str = "") -> None:
     """会话落盘。
 
     ⚠️ 为什么必须落盘：SESSIONS 原来只在内存，而**每次部署都会重启容器** ——
@@ -90,6 +90,9 @@ def _save_session(sid: str, agent: "SoulAgent") -> None:
             "history": agent.history,
             "is_self": agent.is_self,
             "key": agent.key,
+            # 记下这是谁的一场对话 —— 没有它就没法把「我和谁的这场对话」安全地关联起来
+            # （按 TA 名字去猜会串号：两个人聊同一个 TA 就分不清了）
+            "uid": uid or "",
             "updated": int(time.time()),
         })
     except Exception as e:
@@ -664,7 +667,7 @@ def api_load(req: LoadReq):
            cached=from_cache, n=len(library))
     sid = uuid.uuid4().hex
     SESSIONS[sid] = SoulAgent(name=author, persona=persona, library=library, verbose=False)
-    _save_session(sid, SESSIONS[sid])
+    _save_session(sid, SESSIONS[sid], uid=req.user_id)
     return {
         "ok": True,
         "session_id": sid,
@@ -717,7 +720,7 @@ def api_chat(req: ChatReq):
                 agent.history.pop()
             reply = ("【依据】\n【回应】这个我还真答不上来 —— 要不咱还是聊他写过的东西？"
                      "你想从哪块说起。")
-    _save_session(req.session_id, agent)          # 每轮都存：会话丢了也能从磁盘接回来
+    _save_session(req.session_id, agent, uid=req.user_id)   # 每轮都存：会话丢了也能从磁盘接回来
     _record_history(req.user_id, agent.name, topic=req.topic, sid=req.session_id)   # 让「我聊过的人」当天就有内容
     # ⚠️ 模型输出是两段（【依据】…/【回应】…）—— 必须拆开再给前端，
     # 否则界面上会原样显示「【依据】[12] 【回应】…」，很难看。
