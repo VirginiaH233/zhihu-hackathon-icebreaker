@@ -517,6 +517,8 @@ button.share { background: linear-gradient(135deg, #ff8a63, #ff7a59); border-col
 .hitem .hm span { font-size: 11px; color: var(--sub); white-space: nowrap; }
 .hitem .ht { font-size: 11.5px; color: var(--sub); margin-top: 4px; line-height: 1.7; }
 .hitem button { margin-top: 8px; font-size: 12px; padding: 6px 12px; }
+.hitem .hacts { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.hitem .hacts button { margin-top: 0; }
 
 /* 反馈入口 */
 .feed { display: inline-block; margin-top: 12px; font-size: 12.5px; color: var(--brand);
@@ -1212,7 +1214,7 @@ body.gready #gate .g-btn { background: var(--accent); color: var(--accent-ink);
     <!-- 常驻方向盘 -->
     <div class="talk-wheel" id="talk-wheel" style="display:none">
       <button class="ghost" onclick="moreTopics()">换一批话题</button>
-      <button class="ghost" onclick="finishTalk()">我聊完了</button>
+      <button class="accent" onclick="finishTalk()">聊完了，看我能发什么 ›</button>
     </div>
   </div>
 
@@ -2317,8 +2319,13 @@ async function sendTalk() {
     addMsg('ta', d.reply, ev, taName, 'talk-log');
     myTalk.push({ name: taName, text: d.reply });
     talkRounds++;
-    if (talkRounds === 5) {
-      addMsg('sys', '聊得差不多了？点下面「我聊完了」，我帮你把想说的那句话整理出来。', '', '', 'talk-log');
+    // ⚠️ 引导出现的时机：原来等第 5 轮，太晚了 —— 很多人聊两三轮就想走，
+    // 而他们以为「聊完 = 结束」，于是从没看见后面还有评论和破冰卡。
+    // 改成第 3 轮就提示：这时已经聊出内容、又不至于烦。
+    if (talkRounds === 3) {
+      addMsg('sys', '聊得差不多了？点下面那个按钮 —— 接下来还有两样东西：'
+        + '①几条**能直接粘去评论的话**（每条都挂着出处）；②一张**破冰卡**（这人对你什么印象、还有什么能聊）。'
+        + '不是聊完就结束了。', '', '', 'talk-log');
     }
   } catch (e) {
     if (t) t.remove();
@@ -2437,7 +2444,8 @@ function renderComments(d, topic) {
   box.innerHTML = '';
   const hd = document.createElement('div');
   hd.className = 'tk-lb';
-  hd.innerHTML = '能直接发出去的评论<span>挑一条 → 点复制 → 点原文去发</span>';
+  hd.innerHTML = '能直接发出去的评论<span>挑一条 → <b>点「复制这句话」</b> → 再点原文去发。'
+    + '复制这一步才算真的用上（不复制，它就只是屏幕上的一段字）</span>';
   box.appendChild(hd);
 
   (d.comments || []).forEach(c => {
@@ -2855,16 +2863,63 @@ async function loadHistory() {
       row.innerHTML = '<div class="hm"><b>' + esc(it.name) + '</b><span>' + when + '</span></div>'
         + (it.last_topic ? '<div class="ht">最近聊：' + esc(String(it.last_topic).slice(0, 42)) + '</div>' : '')
         + (it.comments ? '<div class="ht">拿到过 ' + it.comments + ' 条能发的评论</div>' : '');
+      // 有 sid = 这场对话还在，可以「继续」（断网/误关之后回到现场）；
+      // 没有 sid 才是「再聊一次」（从头开始）
+      const acts = document.createElement('div');
+      acts.className = 'hacts';
+      if (it.sid) {
+        const c = document.createElement('button');
+        c.className = 'accent';
+        c.textContent = '继续这场对话 ›';
+        c.onclick = () => { closeDrawer(); resumeSession(it.sid, it.name); };
+        acts.appendChild(c);
+      }
       const b = document.createElement('button');
       b.className = 'ghost';
-      b.textContent = '再聊一次';
+      b.textContent = it.sid ? '重新聊' : '再聊一次';
       b.onclick = () => { closeDrawer(); loadByCand(it.name, it.signature || ''); };
-      row.appendChild(b);
+      acts.appendChild(b);
+      row.appendChild(acts);
       box.appendChild(row);
     });
   } catch (e) { box.innerHTML = '<div class="hint">读不到记录，稍后再试</div>'; }
 }
 function closeDrawer() { $('drawer').classList.remove('show'); $('overlay').classList.remove('show'); }
+
+/**
+ * 继续一场没聊完的对话 —— 断网、误关页面、临时走开之后，回到原来的现场。
+ *
+ * 后端早就把会话（含对话记录）落盘了，缺的一直是「前端能回到那场对话」。
+ * 恢复之后可以直接接着聊，也可以直接点「聊完了」出评论和破冰卡。
+ */
+async function resumeSession(theSid, name) {
+  try {
+    const d = await (await fetch('/api/session/' + encodeURIComponent(theSid))).json();
+    if (!d.ok) { toast(d.error || '这场对话已经不在了', 3800); return; }
+    // 恢复会话状态
+    sid = theSid;
+    taName = d.name || name || '';
+    dialogue = []; myTalk = []; talkRounds = 0; curTopic = ''; usedTopics = [];
+    // 切到第四幕
+    ['stage-loading', 'stage-ta', 'stage-duel', 'stage-card', 'stage-match']
+      .forEach(i => { const el = $(i); if (el) el.classList.add('hidden'); });
+    $('agent-name').textContent = taName;
+    const log = $('talk-log');
+    log.innerHTML = '';
+    $('talk-head').innerHTML = '接着上次聊 —— TA（「' + esc(taName) + '」）的分身还在这儿。';
+    // 把原来那场对话重放回界面，并重建 myTalk（生成评论/破冰卡要用）
+    (d.history || []).forEach(pair => {
+      const u = pair[0], a = pair[1], ev = pair[2] || '';
+      if (u) { addMsg('me', u, '', '你', 'talk-log'); myTalk.push({ name: '你', text: u }); }
+      if (a) { addMsg('ta', a, ev, taName, 'talk-log'); myTalk.push({ name: taName, text: a }); }
+    });
+    talkRounds = myTalk.filter(x => x.name === '你').length;
+    $('stage-talk').classList.remove('hidden');
+    $('talk-wheel').style.display = 'flex';
+    $('stage-talk').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toast('已回到上次的对话（' + talkRounds + ' 轮）· 可以接着聊，也可以直接出评论', 3600);
+  } catch (e) { toast('恢复失败：' + e.message, 3800); }
+}
 
 /** 顶栏身份的**唯一**渲染入口（别在其他地方直接写 top-name / top-av）。
  *  优先级：知乎已登录 > 有本地分身 > 都没有。 */

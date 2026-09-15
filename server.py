@@ -690,7 +690,7 @@ def api_chat(req: ChatReq):
 
     reply = agent.chat(req.message, topic=req.topic)
     _save_session(req.session_id, agent)          # 每轮都存：会话丢了也能从磁盘接回来
-    _record_history(req.user_id, agent.name, topic=req.topic)   # 让「我聊过的人」当天就有内容
+    _record_history(req.user_id, agent.name, topic=req.topic, sid=req.session_id)   # 让「我聊过的人」当天就有内容
     # ⚠️ 模型输出是两段（【依据】…/【回应】…）—— 必须拆开再给前端，
     # 否则界面上会原样显示「【依据】[12] 【回应】…」，很难看。
     from agent import _split_speech
@@ -727,7 +727,7 @@ def _event(kind: str, **fields) -> None:
 
 
 def _record_history(uid: str, name: str, signature: str = "", topic: str = "",
-                    comment: bool = False) -> None:
+                    comment: bool = False, sid: str = "") -> None:
     """记一条「我和谁聊过」。没有 uid 就不记 —— 没有身份，这条记录没处归属。
 
     这里是**用户自己的使用记录**，不是 TA 的资料：只存名字/签名/时间/最后聊的话题。
@@ -749,13 +749,43 @@ def _record_history(uid: str, name: str, signature: str = "", topic: str = "",
         hit["visits"] = int(hit.get("visits") or 1) + 1
         if comment:
             hit["comments"] = int(hit.get("comments") or 0) + 1
+        if sid:
+            hit["sid"] = sid          # 记住这场对话 —— 断网/误关之后还能接着走
     else:
         items.insert(0, {"name": name, "signature": signature, "ts": now,
                          "last_topic": topic, "visits": 1,
-                         "comments": 1 if comment else 0})
+                         "comments": 1 if comment else 0, "sid": sid})
     items = sorted(items, key=lambda x: x.get("ts") or 0, reverse=True)[:30]   # 留最近 30 个
     path.write_text(json.dumps({"user_id": uid, "items": items}, ensure_ascii=False, indent=1),
                     encoding="utf-8")
+
+
+@app.get("/api/session/{sid}")
+def api_session(sid: str):
+    """取一场对话的现场（TA 名字 + 对话记录）—— 「我聊过的人」里点「继续这场对话」时用。
+
+    为什么要它：用户可能断网、误关页面、或者临时出去一下。原来一刷新就回不来了 ——
+    明明后端存着会话（见 _save_session），前端却接不上，只能从头再来。
+    现在能回到原来的对话现场，接着聊、或者直接出评论和破冰卡。
+    """
+    a = _get_session(sid)
+    if not a:
+        return {"ok": False, "error": "这场对话已经不在了（可能太久没回来）"}
+    # ⚠️ 会话里存的对话是**模型原始输出**（含【依据】[n] / 【回应】两段）。
+    #    直接还给前端，界面上会原样显示那对标记（很难看）—— 所以在这里先拆成
+    #    [用户的话, 分身正文, 依据] 三段，跟正常聊天时接口返回的形态保持一致。
+    from agent import _split_speech
+    hist = []
+    for pair in (a.history or []):
+        u = pair[0] if len(pair) > 0 else ""
+        raw = pair[1] if len(pair) > 1 else ""
+        ev, sp = _split_speech(raw or "")
+        sp = sp or raw
+        # ⚠️ 模型有时把【依据】写在**正文后面**（顺序反了），_split_speech 只认「依据在前」，
+        #    正文尾部就会残留「【依据】[1」。这里再切一刀，保证界面上干净。
+        sp = re.sub(r"\s*【依据】.*$", "", sp, flags=re.S).strip()
+        hist.append([u, sp, ev or ""])
+    return {"ok": True, "name": a.name, "history": hist, "mode": getattr(a, "is_self", False)}
 
 
 @app.get("/api/history")
@@ -955,7 +985,7 @@ def api_opening(req: OpenReq):
     got = _parse_opening(raw)
 
     # 记一笔「我和 TA 聊过」—— 个人抽屉的入口靠它
-    _record_history(req.user_id, ta.name, req.signature)
+    _record_history(req.user_id, ta.name, req.signature, sid=req.session_id)
 
     return {
         "ok": True,
@@ -1132,7 +1162,7 @@ def api_comment(req: CommentReq):
         f"【两个分身之间聊的（只用来判断 TA 的脾气，不是 TA 说过的话）】\n{duel_txt or '（没玩）'}"
     )
 
-    _record_history(req.user_id, ta.name, topic=req.topic, comment=True)
+    _record_history(req.user_id, ta.name, topic=req.topic, comment=True, sid=req.session_id)
 
     items = _parse_comments(raw)
     by_idx = {i: d for i, d in cands}
