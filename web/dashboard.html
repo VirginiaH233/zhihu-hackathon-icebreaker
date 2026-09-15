@@ -24,6 +24,11 @@
   #north .why { font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
 
   /* 漏斗 */
+.chainlab { font-size:11.5px; font-weight:700; color:#8a8172; letter-spacing:.06em; margin:14px 0 8px; }
+.chainlab.side { color:#b08a4a; margin-top:20px; padding-top:14px; border-top:1px dashed #e8e0d2; }
+.step.side .bar { background:linear-gradient(90deg,#F2B134,#E8A33D); opacity:.75; }
+.step .label { display:flex; flex-direction:column; gap:2px; }
+.step .note { font-size:10.5px; color:#a49b8c; font-weight:400; }
   .step { display:flex; align-items:center; gap:12px; margin:9px 0; }
   .step .label { width: 104px; flex:0 0 auto; font-size: 13.5px; }
   .step .barwrap { flex:1; background:#f1f5f9; border-radius:7px; height: 26px; overflow:hidden; }
@@ -63,13 +68,21 @@
 </div>
 
 <script>
-const FUNNEL_STEPS = [
-  ['visit',    '访问'],
-  ['search',   '搜人'],
-  ['soul',     '读 TA'],
-  ['me',       '建自己分身'],
-  ['comment',  '拿到评论'],
-  ['copy_comment', '复制走 ★'],
+/* 每一步「真正依赖」的上一环。
+   ⚠️ 为什么要有这个字段：原来直接按列表顺序算相邻转化率，结果算出
+   「建自己分身 2 人 → 拿到评论 5 人 = 250%」这种倒挂。原因是
+   **评论根本不需要你自己的分身**（它靠 TA 的档案 + 你俩聊的话），
+   这两个不是上下游。相邻两步必须是真依赖关系，百分比才有意义。 */
+const MAIN = [                       // 主链：一路走到「能发出去的那句话」
+  { k: 'visit',        prev: null,   label: '访问',          note: '入口' },
+  { k: 'search',       prev: 'visit',label: '搜人',          note: '想认识谁' },
+  { k: 'soul',         prev: 'search',label: '读 TA 的档案',  note: '看得到 TA 写过什么' },
+  { k: 'comment',      prev: 'soul', label: '拿到评论',      note: '读懂 TA + 聊过几句就够，不要求你建分身' },
+  { k: 'copy_comment', prev: 'comment',label: '复制评论 ★',  note: '他打算真的发出去（北极星）' },
+];
+// 支线：不在这条主链上，但决定「你们可能都感兴趣」那组话题能不能解锁
+const SIDE = [
+  { k: 'me', prev: 'soul', label: '建自己的分身', note: '支线 —— 解锁「你们可能都感兴趣」那组话题' },
 ];
 const $ = (s) => document.querySelector(s);
 const esc = (s) => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -94,25 +107,33 @@ function render(d) {
   h += `<div class="card"><h2>漏斗</h2>
     <div class="hint">每一步多少人走到 —— 看「哪一步掉得最狠」，那里就是最该优化的一环。
       <br><b>口径</b>：全部按<b>独立人数</b>算（同一人只算一次）；括号里是<b>次数</b>。累计自 ${esc(d.funnel_since || '上线')} 起（不是今日值）。
+      <br><b>注意</b>：只有<b>真依赖的两步</b>之间才算转化率；不是一条直线，所以分主链和支线看。
       ${((d.funnel_pv||{}).visit||0) > (f.visit||0) ? '<br><span class="warnline">⚠️ 次数多于人数：早期埋点没带用户标识，那部分事件不计入人数，所以人数偏低 —— 属正常。</span>' : ''}</div>`;
   if (!first) {
     h += `<div class="empty">还没有数据（产品刚上线 / 还没有人访问）</div>`;
   } else {
-    FUNNEL_STEPS.forEach(([k, label], i) => {
-      const v = f[k] || 0;
+    const drawStep = (st, dim) => {
+      const v = f[st.k] || 0;
       const w = first ? Math.max(1, Math.round(v / first * 100)) : 0;
-      const pv = (d.funnel_pv || {})[k] || 0;
-      const prev = i === 0 ? null : (f[FUNNEL_STEPS[i-1][0]] || 0);
+      const pv = (d.funnel_pv || {})[st.k] || 0;
+      const prev = st.prev ? (f[st.prev] || 0) : null;
       const pct = prev ? Math.round(v / prev * 100) : null;
       const rc = pct === null ? '' : rateClass(pct);
-      h += `<div class="step">
-        <div class="label">${label}</div>
+      return `<div class="step${dim ? ' side' : ''}">
+        <div class="label"><b>${st.label}</b><span class="note">${st.note}</span></div>
         <div class="barwrap"><div class="bar" style="width:${w}%"></div></div>
         <div class="num">${v}${pv > v ? ` <span class="pv">(${pv})</span>` : ''}</div>
         <div class="rate ${rc}">${pct === null ? '' : pct + '%'}</div>
       </div>`;
-    });
-    h += `<div class="hint" style="margin-top:12px">最右列 = 相对上一步的转化率（<b>按人数算</b>）。60% 以上绿、30–60% 黄、30% 以下红。</div>`;
+    };
+    h += `<div class="chainlab">主链 · 一路走到「能发出去的那句话」</div>`;
+    MAIN.forEach(st => { h += drawStep(st, false); });
+    h += `<div class="chainlab side">支线 · 不影响主链，但决定另一组话题能不能解锁</div>`;
+    SIDE.forEach(st => { h += drawStep(st, true); });
+    h += `<div class="hint" style="margin-top:12px">
+      最右列 = 相对<b>它真正依赖的那一步</b>的转化率（按人数算，不是简单取列表上一个）。60% 以上绿、30–60% 黄、30% 以下红。
+      <br><b>为什么分两条线</b>：评论不需要你建分身（靠 TA 的档案 + 聊过的话），所以「建分身 → 评论」这种相邻是假的 ——
+      以前这么算过，得出过 250% 的倒挂。支线的意义是：不建分身的人，会少拿到「你们可能都感兴趣」那一组话题。</div>`;
   }
   h += `</div>`;
 
