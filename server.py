@@ -156,8 +156,14 @@ def _save_json(path: Path, obj):
 # 工具函数
 # ============================================================
 
-def cli_raw(args: list, retries: int = 3) -> str:
-    """调用 zhihu-cli，带限流重试。返回 stdout。"""
+def cli_raw(args: list, retries: int = 4) -> str:
+    """调用 zhihu-cli，带重试。返回 stdout。
+
+    ⚠️ 重试策略（2026-09-15 修）：
+    原来遇到「非限流错误」直接 break 放弃 —— 而模型偶发失败（尤其输入长的时候）
+    正好不属于限流，于是**一次失败就整个 502**。表现就是「破冰卡有时能出、有时没写出来」。
+    现在改成：**任何失败都重试**，只是退避不同（限流等更久，其他错误等短一点）。
+    """
     last = ""
     for attempt in range(retries):
         r = subprocess.run([CLI] + args, capture_output=True, text=True,
@@ -167,10 +173,10 @@ def cli_raw(args: list, retries: int = 3) -> str:
             return r.stdout
         last = out[:200]
         if "rate limit" in out or "rate_limit" in out:
-            time.sleep(20 * (attempt + 1))
-            continue
-        break
-    raise HTTPException(status_code=502, detail=f"CLI 调用失败: {last}")
+            time.sleep(20 * (attempt + 1))       # 限流：等久一点
+        else:
+            time.sleep(3 * (attempt + 1))        # 模型偶发失败：短退避后立刻重试
+    raise HTTPException(status_code=502, detail=f"CLI 调用失败（已重试 {retries} 次）: {last}")
 
 
 def cli_answer(query: str, model: str = "zhida-thinking-1p5") -> str:
