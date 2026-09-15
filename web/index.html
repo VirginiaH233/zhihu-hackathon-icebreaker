@@ -2396,12 +2396,31 @@ function finishTalkToComment() {
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
+/**
+ * 发请求 + 失败自动重试。
+ * ⚠️ 为什么要它：模型偶发抽风（尤其输入长的时候）会让这一次生成整个失败。
+ * 用户（和评委）看到的就是「没写出来」—— 但其实再点一次就成了。
+ * 与其让人自己重点，不如这里自动重试一次，对用户完全无感。
+ */
+async function jpostRetry(path, body, tries = 2) {
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    try {
+      const d = await jpost(path, body);
+      if (d && d.ok) return d;
+      last = d;
+    } catch (e) { last = { ok: false, error: e.message }; }
+    if (i < tries - 1) await new Promise(r => setTimeout(r, 1200));
+  }
+  return last || { ok: false, error: '没成功' };
+}
+
 async function makeComment(topic) {
   const box = $('talk-topics');
   box.innerHTML = '<div class="tk-lb">正在写评论<span>只引 TA 公开写过的内容，每条都挂着出处</span></div>';
   const busy = showBusy('talk-topics', 'comment', '正在写');
   try {
-    const d = await jpost('/api/comment', { session_id: sid, user_id: uid, topic, dialogue: myTalk, duel: dialogue });
+    const d = await jpostRetry('/api/comment', { session_id: sid, user_id: uid, topic, dialogue: myTalk, duel: dialogue });
     busy.stop();
     if (!d.ok) { toast(d.error || '没写出来，再试一次', 3800); finishTalkToComment(); return; }
     renderComments(d, topic);
@@ -2489,7 +2508,7 @@ async function makeCard() {
   $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const busy = showBusy('ice-card', 'card', '正在写这张卡');
   try {
-    const d = await jpost('/api/icebreak', { session_id: sid, user_id: uid, intro: introText, dialogue: myTalk, duel: dialogue });
+    const d = await jpostRetry('/api/icebreak', { session_id: sid, user_id: uid, intro: introText, dialogue: myTalk, duel: dialogue });
     busy.stop();
     if (!d.ok) { toast(d.error); $('ice-card').innerHTML = '<div class="hint">没写出来：' + esc(d.error || '再试一次') + '</div>'; return; }
     renderIce(d.card, d.ta_name || taName);
