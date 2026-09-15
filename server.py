@@ -726,6 +726,16 @@ def api_chat(req: ChatReq):
     # 否则界面上会原样显示「【依据】[12] 【回应】…」，很难看。
     from agent import _split_speech
     ev, sp = _split_speech(reply)
+    # 空产出重试 + 如实报失败（和 opening/comment/icebreak 同一套：
+    # 模型偶发返回空时，别把一条空白消息当成"成功"塞进对话里）
+    if not (sp or reply or "").strip():
+        time.sleep(1.2)
+        reply = agent.chat(req.message, topic=req.topic)
+        if _is_bounced(reply):
+            reply = (agent.chat_plain(req.message, topic=req.topic) or "")
+        ev, sp = _split_speech(reply)
+    if not (sp or reply or "").strip():
+        return {"ok": False, "error": "这条没回上 —— 再说一次？"}
     hits = [{"id": i, "title": d["title"], "summary": d["summary"], "sim": s}
             for i, d, s in agent.last_hits]
     _event("chat", uid=(req.user_id or "")[:24], name=agent.name, round=len(agent.history))
@@ -1012,8 +1022,18 @@ def api_opening(req: OpenReq):
     p = p.split("---", 2)[2].strip() if p.startswith("---") else p
 
     from agent import build_opening_prompt
-    raw = cli_answer(build_opening_prompt(ta, p, my_lib, my_state))
+    _ask_prompt = build_opening_prompt(ta, p, my_lib, my_state)
+    raw = cli_answer(_ask_prompt)
     got = _parse_opening(raw)
+    # ⚠️ 模型偶发返回空/不可解析的结果。以前这里照样报 ok:True + 空话题 ——
+    # 用户看到一片空白，还不知道能重试（"产出为空却报成功"是踩过好几次的坑）。
+    # 产出为空就再要一次；还是要不到就**如实说失败**，前端才能提示重试。
+    if not got["m1"] and not got["m2"]:
+        time.sleep(1.2)
+        raw = cli_answer(_ask_prompt)
+        got = _parse_opening(raw)
+    if not got["m1"] and not got["m2"]:
+        return {"ok": False, "error": "这次没聊出话题来 —— 再点一次试试"}
 
     # 记一笔「我和 TA 聊过」—— 个人抽屉的入口靠它
     _record_history(req.user_id, ta.name, req.signature, sid=req.session_id)
@@ -1185,17 +1205,25 @@ def api_comment(req: CommentReq):
 
     p = (ROOT / "prompts" / "5-评论.md").read_text(encoding="utf-8")
     p = p.split("---", 2)[2].strip() if p.startswith("---") else p
-    raw = cli_answer(
+    _prompt = (
         f"{p}\n\n【TA 的名字】{ta.name}\n\n【候选内容】\n{lib_text}\n\n"
         f"【这个用户刚聊过的话题】{req.topic or '（没指定）'}\n\n"
         f"【你自己（用户本人）写过的东西，标题列表】\n{my_lib_txt or '（无——用户没授权，或没写东西）'}\n\n"
         f"【你（用户本人）和 TA 的分身聊的 —— 这是他本人亲口问的】\n{convo or '（没聊几句）'}\n\n"
         f"【两个分身之间聊的（只用来判断 TA 的脾气，不是 TA 说过的话）】\n{duel_txt or '（没玩）'}"
     )
+    raw = cli_answer(_prompt)
 
     _record_history(req.user_id, ta.name, topic=req.topic, comment=True, sid=req.session_id)
 
     items = _parse_comments(raw)
+    # 空产出重试（同 opening：模型偶发返回空，别把空白当成功交出去）
+    if not items:
+        time.sleep(1.2)
+        raw = cli_answer(_prompt)
+        items = _parse_comments(raw)
+    if not items:
+        return {"ok": False, "error": "这次没写出来 —— 再点一次试试"}
     by_idx = {i: d for i, d in cands}
     comments = []
     for it in items[: max(1, min(req.n, 4))]:
@@ -1314,7 +1342,7 @@ def api_icebreak(req: IceReq):
     my_lib = (my_rec or {}).get("library", []) if my_rec else []
     my_lib_txt = "\n".join(f"- {x.get('title','')}" for x in (my_lib or [])[:6])
 
-    card = cli_answer(
+    _prompt = (
         f"{p}\n\n【TA 的名字】{ta.name}\n\n【TA 的灵魂档案】\n{ta.persona}\n\n"
         f"【用户自己的档案（他本人写过/在意什么）】\n{my_persona or '（用户没授权读创作，无）'}\n\n"
         f"【用户自己写过的东西（标题）】\n{my_lib_txt or '（无）'}\n\n"
@@ -1322,6 +1350,13 @@ def api_icebreak(req: IceReq):
         f"【你（用户本人）和 TA 的分身聊的 —— 这是他本人亲口问的，最重要】\n{convo or '（没聊）'}\n\n"
         f"【两个分身之间聊的（信息隔离下的试探，用来判断 TA 的脾气，不是 TA 说过的话）】\n{duel_txt or '（没玩这个彩蛋）'}"
     )
+    card = cli_answer(_prompt)
+    # 空产出重试：这张卡是流程终点，交出去一张空白等于白玩一场
+    if not (card or "").strip():
+        time.sleep(1.2)
+        card = cli_answer(_prompt)
+    if not (card or "").strip():
+        return {"ok": False, "error": "这次没写出来 —— 再点一次试试"}
     _event("icebreak", uid=(req.user_id or "")[:24], name=ta.name)
     # 带上产品二维码 —— 破冰卡的保存图要把它印在页脚（扫了就回到产品，能直接玩）
     return {"ok": True, "card": card, "ta_name": ta.name,
