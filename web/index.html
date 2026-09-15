@@ -2121,13 +2121,13 @@ function addMsg(who, text, evidence = '', name = '', box = 'duel-log') {
         c.onclick = () => pop.classList.toggle('show');
         basis.appendChild(c); wrap.appendChild(pop);
       });
-    } else {
-      const c = document.createElement('span');
-      c.className = 'chip none';
-      c.textContent = '无（TA 没写过这个话题）';
-      basis.appendChild(c);
     }
-    wrap.appendChild(basis);
+    // 这一轮 TA 没引用自己写过的内容 → **一个标签都不加**。
+    // 原来这里挂一个「无（TA 没写过这个话题）」的灰标签：每条都挂一个"无"，
+    // 满屏否定标签，观感很差（用户报「现在太多依据无了」）。
+    // 「没有标签」本身就说明这轮没引用，不用再写一个字强调。
+    // ⚠️ 这段千万别写成提前 return —— 后面还有「把消息挂到页面上」，一 return 消息就没了。
+    if (hit.length) wrap.appendChild(basis);
   }
   document.getElementById(box).appendChild(wrap);
   wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2315,8 +2315,11 @@ async function sendTalk() {
     const d = await jpost('/api/chat', { session_id: sid, user_id: uid, message: v, topic: curTopic });
     if (t) t.remove();
     if (!d.ok) { addMsg('sys', '（' + (d.error || '没回上，再说一次？') + '）', '', '', 'talk-log'); return; }
-    // 依据优先用模型自己写的（接口已拆好）；没有才退回检索命中
-    const ev = d.evidence || (d.hits || []).map(x => '[' + x.id + ']').join('、');
+    // 依据**只用模型自己写的**（接口已拆好）。
+    // ⚠️ 原来这里有个兜底：模型没写就退回「检索命中的编号」—— 但检索命中只是
+    // 「可能相关」，不等于这轮真引用了。那等于替 TA 造假依据，而且让每一轮都挂着
+    // 依据标签（观感噪音）。模型没写就是不引用，别替它凑。
+    const ev = d.evidence || '';
     addMsg('ta', d.reply, ev, taName, 'talk-log');
     myTalk.push({ name: taName, text: d.reply });
     talkRounds++;
