@@ -2525,6 +2525,7 @@ async function makeCard() {
     const d = await jpostRetry('/api/icebreak', { session_id: sid, user_id: uid, intro: introText, dialogue: myTalk, duel: dialogue });
     busy.stop();
     if (!d.ok) { toast(d.error); $('ice-card').innerHTML = '<div class="hint">没写出来：' + esc(d.error || '再试一次') + '</div>'; return; }
+    window.__ICE_QR = d.qr || '';          // 二维码：导出图片时印在页脚（扫了回到产品）
     renderIce(d.card, d.ta_name || taName);
     $('stage-card').classList.remove('hidden');
     $('stage-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2576,13 +2577,13 @@ function renderIce(raw, name) {
   const lines = openers.split('\n').map(s => s.replace(/^\d+[.、)]\s*/, '').trim()).filter(s => s.length > 4);
 
   // 存下来给「导出图片」用
-  window.__ICE = { name, insight, view, openers: lines, points };
+  window.__ICE = { name, insight, view, openers: lines, points, qr: (window.__ICE_QR || '') };
 
   let h = `
     <div class="ice-top">
       <div>
         <div class="ice-brand">社恐破冰船 · BREAKING ICE</div>
-        <div class="ice-title">${esc(name)} 的分身 × 你的分身 · 旁观笔记</div>
+        <div class="ice-title">你和「${esc(name)}」的分身聊出来的 · 破冰卡</div>
       </div>
       <div class="ice-to">给你的第 1 句</div>
     </div>
@@ -2628,117 +2629,175 @@ function copyOpener(el) {
   copyText(txt, el, '开场白已复制', '开场白已复制');
 }
 
-/** 把破冰卡画成图片（保存 / 分享用） */
-function exportCard() {
+/** SVG 里没有自动换行，得自己按宽度切。中文按 1 个字宽、英文数字按 0.55 算。 */
+function _iceWrap(text, size, maxW) {
+  const lines = [];
+  String(text || '').split('\n').forEach(par => {
+    par = par.trim();
+    if (!par) { lines.push(''); return; }
+    let line = '', w = 0;
+    for (const ch of par) {
+      const cw = ch.charCodeAt(0) < 256 ? size * 0.55 : size;
+      if (line && w + cw > maxW) { lines.push(line); line = ch; w = cw; }
+      else { line += ch; w += cw; }
+    }
+    if (line) lines.push(line);
+  });
+  return lines;
+}
+
+/** 组装破冰卡的 SVG。
+ *
+ *  ⚠️ 为什么用 SVG 而不是 canvas 手绘：canvas 版等于把这张卡**又画一遍** ——
+ *  改界面的一处样式要记得改两处，越往后越不像（用户报「保存图没美化」就是这个原因）。
+ *  走 SVG 就能和界面共用同一套色与结构（信笺：暖纸底 + 左侧渐变竖线 + 金色栏目名）。
+ *  返回 { svg, qr }：qr 是二维码在图上的位置（导出时单独补画，iOS 的 SVG→canvas 会丢图）。
+ */
+function buildIceSVG(d) {
+  const PAD = 40, W = 600, INNER = W - PAD * 2;
+  const F = '"Microsoft YaHei","PingFang SC",sans-serif';
+  const GOLD = '#B8863A', INK = '#4A3A1E', INK2 = '#3A2A0C', DASH = 'rgba(232,163,61,.42)';
+  const LS = 1.9;                      // 正文行高（倍数）
+
+  const esc = (t) => String(t || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // ---- 先量一遍，算出总高 ----
+  const secs = [];
+  if (d.view)    secs.push({ t: 'TA 眼中的你',  big: true,  lines: _iceWrap(d.view, 17, INNER - 34) });
+  if (d.insight) secs.push({ t: '一句话洞察',   big: false, lines: _iceWrap(d.insight, 15, INNER) });
+  if ((d.openers || []).length) secs.push({ t: '三句开场白', list: (d.openers || []).slice(0, 3) });
+  if (d.points)  secs.push({ t: '两个兴趣点',   big: false, lines: _iceWrap(d.points, 15, INNER) });
+
+  let h = 34;                                     // 上边距
+  h += 62;                                        // 头部两行 + 分隔
+  secs.forEach(s => {
+    h += 26;                                      // 小标题
+    if (s.list) s.list.forEach(x => { h += _iceWrap(x, 14, INNER - 46).length * 26 + 14; });
+    else if (s.big) h += s.lines.length * 17 * LS + 34;
+    else h += s.lines.length * 15 * LS + 8;
+    h += 14;                                      // 段间距
+  });
+  h += 96;                                        // 页脚（虚线 + 品牌 + 二维码）
+  h += 30;                                        // 下边距
+
+  // ---- 画 ----
+  let y = 34, o = [];
+  const txt = (x, yy, t, size, fill, extra = '') =>
+    `<text x="${x}" y="${yy}" font-size="${size}" fill="${fill}" font-family='${F}' ${extra}>${esc(t)}</text>`;
+
+  // 头部
+  o.push(txt(PAD, y + 10, '社恐破冰船 · BREAKING ICE', 11, GOLD,
+             'font-weight="700" letter-spacing="2.2"'));
+  o.push(txt(PAD, y + 42, d.name + ' 的破冰卡', 25, INK2, 'font-weight="700"'));
+  o.push(`<text x="${W - PAD}" y="${y + 40}" font-size="11" fill="#A98F63" text-anchor="end" font-family='${F}'>知乎人格 · 公开内容</text>`);
+  o.push(`<line x1="${PAD}" y1="${y + 62}" x2="${W - PAD}" y2="${y + 62}" stroke="${DASH}" stroke-dasharray="5 6"/>`);
+  y += 62 + 26;
+
+  // 各段
+  secs.forEach(s => {
+    o.push(txt(PAD, y, s.t, 10.5, GOLD, 'font-weight="700" letter-spacing="1.9"'));
+    y += 22;
+    if (s.list) {
+      s.list.forEach((x, i) => {
+        const L = _iceWrap(x, 14, INNER - 46);
+        o.push(`<circle cx="${PAD + 9}" cy="${y - 4}" r="9" fill="rgba(255,122,89,.1)"/>`);
+        o.push(`<text x="${PAD + 9}" y="${y}" font-size="10.5" fill="${GOLD}" font-weight="700" text-anchor="middle" font-family='${F}'>${i + 1}</text>`);
+        L.forEach((t, j) => o.push(txt(PAD + 30, y + j * 26, t, 14, INK)));
+        y += L.length * 26 + 14;
+      });
+    } else if (s.big) {
+      const bh = s.lines.length * 17 * LS + 26;
+      o.push(`<rect x="${PAD}" y="${y - 14}" width="${INNER}" height="${bh}" rx="10" fill="#ffffff"/>`);
+      o.push(`<rect x="${PAD}" y="${y - 14}" width="4" height="${bh}" rx="2" fill="#ff7a59"/>`);
+      s.lines.forEach((t, j) => o.push(txt(PAD + 17, y + j * 17 * LS + 4, t, 17, INK2, 'font-weight="600"')));
+      y += bh + 14;
+    } else {
+      s.lines.forEach((t, j) => o.push(txt(PAD, y + j * 15 * LS, t, 15, INK)));
+      y += s.lines.length * 15 * LS + 8;
+    }
+    y += 14;
+  });
+
+  // 页脚
+  y += 4;
+  o.push(`<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="${DASH}" stroke-dasharray="5 6"/>`);
+  y += 22;
+  o.push(txt(PAD, y + 22, '基于 TA 的公开内容推演，不是 TA 本人的真实想法', 11, '#A98F63'));
+  o.push(txt(PAD, y + 40, '真正的答案，只有你开口之后才知道', 11, '#A98F63'));
+
+  // 二维码（导出时单独补画；这里留位）
+  const QR = 62, qx = W - PAD - QR, qy = y + 2;
+  let qrSvg = '';
+  if (d.qr) qrSvg = `<image class="qr" x="${qx}" y="${qy}" width="${QR}" height="${QR}" xlink:href="${d.qr}" href="${d.qr}"/>`;
+  o.push(`<rect x="${qx}" y="${qy}" width="${QR}" height="${QR}" rx="6" fill="#fff" stroke="${DASH}"/>` + qrSvg);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${Math.ceil(h)}" viewBox="0 0 ${W} ${Math.ceil(h)}">`
+    + `<rect width="${W}" height="${Math.ceil(h)}" fill="#FDFBF7"/>`
+    + `<defs><linearGradient id="spine" x1="0" y1="0" x2="0" y2="1">`
+    + `<stop offset="0%" stop-color="#ff7a59"/><stop offset="55%" stop-color="#F6C97A"/><stop offset="100%" stop-color="#2f9e8f"/>`
+    + `</linearGradient></defs>`
+    + `<rect x="0" y="0" width="7" height="${Math.ceil(h)}" fill="url(#spine)"/>`
+    + `<rect x="0.5" y="0.5" width="${W - 1}" height="${Math.ceil(h) - 1}" fill="none" stroke="${DASH}"/>`
+    + o.join('') + `</svg>`;
+
+  return { svg, qr: d.qr ? { x: qx, y: qy, size: QR, data: d.qr } : null };
+}
+
+/** 把破冰卡导出成 PNG（保存 / 分享用）。
+ *  和分享卡走同一条路：SVG → canvas → blob，二维码单独补画。
+ */
+async function exportCard(scale = 2) {
   const d = window.__ICE;
   if (!d) { toast('还没有破冰卡'); return; }
-
-  const F = '"Microsoft YaHei", "PingFang SC", sans-serif';
-  const W = 900, PAD = 56, INNER = W - PAD * 2;
-  const cvs = document.createElement('canvas');
-  const ctx = cvs.getContext('2d');
-
-  const wrapText = (text, font, maxW) => {
-    ctx.font = font;
-    const out = [];
-    String(text || '').split('\n').forEach(para => {
-      if (!para) { out.push(''); return; }
-      let line = '';
-      for (const ch of para) {
-        if (line && ctx.measureText(line + ch).width > maxW) { out.push(line); line = ch; }
-        else line += ch;
-      }
-      out.push(line);
+  const tip = $('ice-tip') || $('card-tip');
+  if (tip) tip.textContent = '正在生成图片…';
+  try {
+    const built = buildIceSVG(d);
+    const url = URL.createObjectURL(new Blob([built.svg], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    const canvas = await new Promise((res, rej) => {
+      img.onload = () => {
+        const vb = (built.svg.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/) || []);
+        const W = +vb[1] || 600, H = +vb[2] || 900;
+        const c = document.createElement('canvas');
+        c.width = W * scale; c.height = H * scale;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#FDFBF7'; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        if (built.qr && built.qr.data) {
+          const qi = new Image();
+          qi.onload = () => { ctx.drawImage(qi, built.qr.x * scale, built.qr.y * scale, built.qr.size * scale, built.qr.size * scale); res(c); };
+          qi.onerror = () => res(c);
+          qi.src = built.qr.data;
+        } else res(c);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('SVG 转图片失败')); };
+      img.src = url;
     });
-    return out;
-  };
-
-  // ---- 1. 先算高度 ----
-  let h = 0;
-  h += 118;                                   // 头部
-  const blocks = [];
-  if (d.view) { const L = wrapText(d.view, '600 26px ' + F, INNER - 40); blocks.push({ t: 'TA 眼中的你', lines: L, hl: true, f: '600 26px ' + F, lh: 42 }); }
-  if (d.insight) { const L = wrapText(d.insight, '23px ' + F, INNER); blocks.push({ t: '一句话洞察', lines: L, f: '23px ' + F, lh: 36 }); }
-  if (d.openers.length) { blocks.push({ t: '三句开场白', list: d.openers.map(s => wrapText(s, '23px ' + F, INNER - 70)) }); }
-  if (d.points) { const L = wrapText(d.points, '23px ' + F, INNER); blocks.push({ t: '两个兴趣点', lines: L, f: '23px ' + F, lh: 36 }); }
-
-  blocks.forEach(b => {
-    h += 46;                                  // 小标题
-    if (b.hl) h += b.lines.length * b.lh + 34;
-    else if (b.list) b.list.forEach(l => { h += l.length * 36 + 22; });
-    else h += b.lines.length * b.lh + 10;
-  });
-  h += 92;                                    // 页脚
-
-  cvs.width = W; cvs.height = h;
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#FFFDF8'); g.addColorStop(1, '#FFF8EC');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, h);
-
-  // 虚线内框
-  ctx.strokeStyle = 'rgba(232,163,61,.42)'; ctx.lineWidth = 2; ctx.setLineDash([7, 7]);
-  ctx.strokeRect(20, 20, W - 40, h - 40); ctx.setLineDash([]);
-
-  // ---- 2. 头部 ----
-  ctx.fillStyle = '#B8863A'; ctx.font = 'bold 15px ' + F;
-  ctx.fillText('社恐破冰船 · BREAKING ICE', PAD, 76);
-  ctx.fillStyle = '#4A3A1E'; ctx.font = 'bold 34px ' + F;
-  ctx.fillText(d.name + ' 的破冰卡', PAD, 122);
-  ctx.strokeStyle = 'rgba(232,163,61,.38)'; ctx.setLineDash([5, 6]);
-  ctx.beginPath(); ctx.moveTo(PAD, 152); ctx.lineTo(W - PAD, 152); ctx.stroke(); ctx.setLineDash([]);
-
-  // ---- 3. 内容 ----
-  let y = 198;
-  blocks.forEach(b => {
-    ctx.fillStyle = '#B8863A'; ctx.font = 'bold 14px ' + F;
-    ctx.fillText('◆ ' + b.t, PAD, y);
-    y += 30;
-
-    if (b.hl) {
-      ctx.fillStyle = 'rgba(255,255,255,.75)';
-      ctx.fillRect(PAD, y - 4, INNER, b.lines.length * b.lh + 24);
-      ctx.fillStyle = '#E8A33D';
-      ctx.fillRect(PAD, y - 4, 5, b.lines.length * b.lh + 24);
-      ctx.fillStyle = '#4A3A1E'; ctx.font = b.f;
-      b.lines.forEach(l => { ctx.fillText(l, PAD + 22, y + 28); y += b.lh; });
-      y += 26;
-    } else if (b.list) {
-      b.list.forEach((ls, i) => {
-        ctx.fillStyle = 'rgba(255,255,255,.8)';
-        ctx.fillRect(PAD, y - 2, INNER, ls.length * 36 + 18);
-        ctx.strokeStyle = '#F0D9B0'; ctx.lineWidth = 1;
-        ctx.strokeRect(PAD, y - 2, INNER, ls.length * 36 + 18);
-        ctx.fillStyle = '#B8863A'; ctx.font = 'bold 16px ' + F;
-        ctx.fillText(String(i + 1), PAD + 18, y + 26);
-        ctx.fillStyle = '#4A3A1E'; ctx.font = '23px ' + F;
-        ls.forEach(l => { ctx.fillText(l, PAD + 52, y + 26); y += 36; });
-        y += 20;
-      });
-    } else {
-      ctx.fillStyle = '#4A3A1E'; ctx.font = b.f;
-      b.lines.forEach(l => { ctx.fillText(l, PAD, y + 22); y += b.lh; });
-      y += 14;
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    const fname = (d.name || 'TA') + '的破冰卡.png';
+    // 手机上 a.download 常静默失败（iOS Safari）→ 优先系统分享面板，用户选「存储图像」
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+      || (navigator.maxTouchPoints > 1 && window.innerWidth < 768);
+    if (isMobile && navigator.canShare && navigator.canShare({ files: [new File([blob], fname, { type: 'image/png' })] })) {
+      try {
+        await navigator.share({ files: [new File([blob], fname, { type: 'image/png' })], title: '我的破冰卡' });
+        if (tip) tip.textContent = '✓ 已打开分享面板（选「存储图像」保存）';
+        toast('图片已保存');
+        return;
+      } catch (e) { if (e && e.name === 'AbortError') { if (tip) tip.textContent = '已取消'; return; } }
     }
-    y += 18;
-  });
-
-  // ---- 4. 页脚 ----
-  ctx.strokeStyle = 'rgba(232,163,61,.38)'; ctx.setLineDash([5, 6]);
-  ctx.beginPath(); ctx.moveTo(PAD, h - 74); ctx.lineTo(W - PAD, h - 74); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = '#9B7B45'; ctx.font = '17px ' + F;
-  ctx.fillText('基于 TA 的公开内容推演，不是 TA 本人的真实想法。', PAD, h - 44);
-  ctx.fillText('真正的答案，只有你开口之后才知道。', PAD, h - 18);
-
-  // ---- 5. 下载 ----
-  cvs.toBlob(blob => {
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = '旁观笔记-' + d.name + '.png';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-    toast('已保存 · 可以直接发给 TA 或存起来');
-  }, 'image/png');
+    a.download = fname; a.href = URL.createObjectURL(blob);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    if (tip) tip.textContent = '✓ 已保存到下载文件夹：' + fname;
+    toast('破冰卡已保存');
+  } catch (e) {
+    if (tip) tip.textContent = '生成失败了，再试一次';
+    toast('生成图片失败：' + e.message);
+  }
 }
 
 /* ────────────────────────────────────────────────────────────

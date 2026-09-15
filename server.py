@@ -1323,7 +1323,9 @@ def api_icebreak(req: IceReq):
         f"【两个分身之间聊的（信息隔离下的试探，用来判断 TA 的脾气，不是 TA 说过的话）】\n{duel_txt or '（没玩这个彩蛋）'}"
     )
     _event("icebreak", uid=(req.user_id or "")[:24], name=ta.name)
-    return {"ok": True, "card": card, "ta_name": ta.name}
+    # 带上产品二维码 —— 破冰卡的保存图要把它印在页脚（扫了就回到产品，能直接玩）
+    return {"ok": True, "card": card, "ta_name": ta.name,
+            "qr": make_qr_datauri(SITE_URL + "/?from=icecard"), "site": SITE_URL}
 
 
 
